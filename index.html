@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arkade Solver Registry</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --accent: #2563eb;
+    --row-hover: #f3f4f6;
+    --badge-bg: #eef2ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111827;
+      --fg: #e5e7eb;
+      --muted: #9ca3af;
+      --border: #374151;
+      --accent: #60a5fa;
+      --row-hover: #1f2937;
+      --badge-bg: #1e293b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 2rem 1rem 4rem; }
+  h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+  .sub { color: var(--muted); margin: 0 0 2rem; }
+  .sub a { color: var(--accent); }
+  section { margin-bottom: 2.5rem; }
+  h2 {
+    font-size: 1.1rem;
+    margin: 0 0 .5rem;
+    display: flex;
+    align-items: baseline;
+    gap: .6rem;
+  }
+  h2 a { color: var(--accent); font-size: .8rem; font-weight: 400; text-decoration: none; }
+  h2 a:hover { text-decoration: underline; }
+  .meta { color: var(--muted); font-size: .8rem; margin: 0 0 .75rem; }
+  .tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; min-width: 700px; }
+  th, td { padding: .5rem .75rem; text-align: left; white-space: nowrap; }
+  th {
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  tbody tr:hover { background: var(--row-hover); }
+  td { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child td { border-bottom: none; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  code {
+    font: .85em ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--badge-bg);
+    padding: .1em .35em;
+    border-radius: 4px;
+  }
+  .empty, .error { color: var(--muted); font-size: .9rem; padding: .75rem; }
+  .error { color: #dc2626; }
+  .price { color: var(--accent); }
+  footer { color: var(--muted); font-size: .8rem; margin-top: 3rem; }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Arkade Solver Registry</h1>
+  <p class="sub">
+    A community-maintained registry of solver markets for Arkade Intents.
+    Wallets fetch one JSON index per network; feed prices refresh every 30s.
+    <a href="https://github.com/ArkLabsHQ/solver-registry">Source &amp; how to list a solver</a>
+  </p>
+  <div id="networks"></div>
+  <footer>
+    Prices come straight from each market's pinned <code>price_feed</code> and
+    are informational — makers must price from the same URL at offer time.
+  </footer>
+</main>
+<script>
+const NETWORKS = ["mainnet", "signet", "mutinynet"];
+const REFRESH_MS = 30_000;
+
+// One in-flight/settled promise per feed URL per refresh cycle, so N markets
+// sharing a feed cost one request and repaints never stack extra calls.
+const feedCache = new Map(); // url -> { at: ms, promise }
+function fetchFeed(url) {
+  const hit = feedCache.get(url);
+  if (hit && Date.now() - hit.at < REFRESH_MS) return hit.promise;
+  const promise = fetch(url)
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status))))
+    .then((body) => extractPrice(body));
+  feedCache.set(url, { at: Date.now(), promise });
+  return promise;
+}
+
+// Binance /ticker/price returns {symbol, price}; be tolerant of similar shapes.
+function extractPrice(body) {
+  const v = body?.price ?? body?.lastPrice ?? body?.last ?? body?.rate;
+  if (v === undefined || isNaN(Number(v))) throw new Error("no price field");
+  return Number(v);
+}
+
+function shortId(side) {
+  return side === "btc" ? "BTC" : side.slice(0, 8) + "…" + side.slice(-6);
+}
+
+function el(tag, attrs = {}, children = []) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "text") node.textContent = v;
+    else node.setAttribute(k, v);
+  }
+  for (const c of children) node.appendChild(c);
+  return node;
+}
+
+async function renderNetwork(network, container) {
+  const section = el("section", {}, [
+    el("h2", {}, [
+      el("span", { text: network }),
+      el("a", { href: `./${network}.json`, text: `${network}.json` }),
+    ]),
+  ]);
+  container.appendChild(section);
+
+  let index;
+  try {
+    const res = await fetch(`./${network}.json`, { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    index = await res.json();
+  } catch (e) {
+    section.appendChild(el("p", { class: "error", text: `Failed to load index: ${e.message}` }));
+    return;
+  }
+
+  const when = new Date(index.generated_at * 1000).toISOString().replace("T", " ").slice(0, 19);
+  section.appendChild(el("p", {
+    class: "meta",
+    text: `generated ${when} UTC · commit ${String(index.commit).slice(0, 7)} · ${index.markets.length} market(s)`,
+  }));
+
+  if (index.markets.length === 0) {
+    section.appendChild(el("p", { class: "empty", text: "No markets listed." }));
+    return;
+  }
+
+  const thead = el("thead", {}, [el("tr", {}, [
+    "Pair", "Solver", "Fee (bps)", "Min (base)", "Max (base)", "Feed price",
+  ].map((h) => el("th", { text: h })))]);
+  const tbody = el("tbody");
+  const priceCells = [];
+
+  for (const m of index.markets) {
+    const [base, quote] = m.pair.split("/");
+    const priceCell = el("td", { class: "num price", text: "…" });
+    priceCells.push([m.price_feed, priceCell]);
+    tbody.appendChild(el("tr", {}, [
+      el("td", {}, [el("code", { title: m.pair, text: `${shortId(base)}/${shortId(quote)}` })]),
+      el("td", { text: m.solver }),
+      el("td", { class: "num", text: String(m.fee_bps) }),
+      el("td", { class: "num", text: m.min_base_amount.toLocaleString("en-US") }),
+      el("td", { class: "num", text: m.max_base_amount.toLocaleString("en-US") }),
+      priceCell,
+    ]));
+  }
+
+  section.appendChild(el("div", { class: "tablewrap" }, [el("table", {}, [thead, tbody])]));
+
+  const refresh = () => {
+    for (const [url, cell] of priceCells) {
+      fetchFeed(url).then(
+        (p) => { cell.textContent = p.toLocaleString("en-US", { maximumFractionDigits: 8 }); },
+        () => { cell.textContent = "unavailable"; },
+      );
+    }
+  };
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+}
+
+const container = document.getElementById("networks");
+for (const network of NETWORKS) renderNetwork(network, container);
+</script>
+</body>
+</html>

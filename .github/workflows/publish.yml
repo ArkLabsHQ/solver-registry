@@ -61,6 +61,7 @@ jobs:
         run: |
           mkdir -p dist
           pnpm reduce --out=dist --commit=${{ github.sha }}
+          cp index.html dist/
 
       - uses: actions/configure-pages@v5
 

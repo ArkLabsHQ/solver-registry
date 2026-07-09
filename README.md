@@ -41,11 +41,13 @@ valid, the PR is the authentication. See the spec for why.
 
 ## Consume the index
 
+Human-readable overview: <https://arklabshq.github.io/solver-registry/>
+
 | Network | Index |
 |---|---|
-| Mainnet | `https://<pages-url>/mainnet.json` |
-| Signet | `https://<pages-url>/signet.json` |
-| Mutinynet | `https://<pages-url>/mutinynet.json` |
+| Mainnet | <https://arklabshq.github.io/solver-registry/mainnet.json> |
+| Signet | <https://arklabshq.github.io/solver-registry/signet.json> |
+| Mutinynet | <https://arklabshq.github.io/solver-registry/mutinynet.json> |
 
 Each index is a flat, pre-sorted (best `fee_bps` first) list of markets for
 that network, stamped with `generated_at` and the source `commit`, matching
@@ -61,6 +63,7 @@ solvers/signet/
 solvers/mutinynet/
 schema/card.schema.json    what a solver PRs
 schema/index.schema.json   what CI publishes
+index.html                 landing page served at the Pages base URL
 scripts/reduce.ts          the reducer: pnpm reduce
 scripts/canonical.ts       canonical JSON + BIP340 helpers
 tests/                     golden index, rejection cases, sort/determinism

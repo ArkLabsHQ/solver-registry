@@ -1,0 +1,15 @@
+{
+  "version": 0,
+  "name": "arklabs",
+  "markets": [
+    {
+      "pair": "btc/47004bf4a5fbdb2221f708030528de68ea28f5980044e546b7bb5a352457d1f30000",
+      "price_feed": "https://api.binance.com/api/v3/ticker/price?symbol=BTCBRL",
+      "price_decimals": 0,
+      "invert": false,
+      "fee_bps": 30,
+      "min_base_amount": 1000,
+      "max_base_amount": 5000000
+    }
+  ]
+}
