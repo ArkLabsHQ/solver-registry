@@ -24,9 +24,9 @@ One file per solver per network, `solvers/<network>/<name>.json` (networks: `mai
   "sig": "<128-hex schnorr, OPTIONAL>",
   "markets": [
     {
-      "pair": "BTC/DePix",
+      "pair": "BTC/USDT",
       "base_asset": { "id": "btc", "name": "Bitcoin", "ticker": "BTC", "precision": 8 },
-      "quote_asset": { "id": "<68-hex AssetId>", "name": "Decentralized Pix", "ticker": "DePix", "precision": 8 },
+      "quote_asset": { "id": "<asset-id-hex>", "name": "Tether USD", "ticker": "USDT", "precision": 6 },
       "price_feed": "https://feed.example.com/price?pair=...",
       "price_decimals": 8,
       "invert": false,
@@ -45,8 +45,8 @@ Field semantics:
 | `name` | Unique within the network directory; must match the filename. CI enforces. |
 | `discovery_pubkey` | Optional in v0, required in v1. The solver's BIP340 identity: signs the card when `sig` is present, and signs v1 quote events. |
 | `sig` | Optional in v0, required in v1. BIP340 Schnorr by `discovery_pubkey` over `sha256(canonical_json)`: the card serialized with `sig` removed, keys sorted lexicographically, no whitespace, UTF-8. If present, `discovery_pubkey` is required and CI MUST verify; if absent, the PR is the authentication. |
-| `base_asset`, `quote_asset` | Each side of the pair: `id` (the canonical identity — `btc` or the serialized AssetId in lowercase hex), plus display metadata `name`, `ticker`, and `precision` (decimals: base-units per display unit = 10^precision). Asset-to-asset pairs are first-class; nothing assumes bitcoin on either side. |
-| `pair` | Display label `<base-ticker>/<quote-ticker>`; MUST equal `base_asset.ticker + "/" + quote_asset.ticker` (CI enforces). Tickers are not unique — matching and grouping key on `base_asset.id`/`quote_asset.id`, never on `pair`. |
+| `pair` | Human-readable label `<base-ticker>/<quote-ticker>` (e.g. `BTC/USDT`); MUST equal the two asset objects' tickers, CI enforces. Display only — NOT an identity. The market's identity is the id pair (`base_asset.id`, `quote_asset.id`): tickers collide, ids don't. Asset-to-asset pairs are first-class; nothing assumes bitcoin on either side. |
+| `base_asset`, `quote_asset` | Per-side asset descriptor: `id` (the canonical identity: `btc` or the serialized AssetId in lowercase hex), `name`, `ticker`, `precision` (decimal places of the atomic unit, e.g. 8 for BTC ⇒ amounts in sats). `precision` is for rendering amounts like `min_base_amount`; it plays no role in pricing math, which stays in atomic units. `name`/`ticker` are unverified labels the solver chose — anyone can call an asset "USDT". Clients MUST group, dedupe, and price by `id` only and MAY badge verification via the asset registry. |
 | `price_feed` | The exact URL the solver's plugin validates against at fill time. Makers MUST price from this URL, not a substitute. MUST be fetchable from browsers (CORS-permissive), otherwise browser wallets cannot price the pair. |
 | `price_decimals`, `invert` | How to normalize the feed's value to quote-units-per-base-unit. Mirrors the solver Pair config. |
 | `fee_bps` | The solver's spread: the promise is that an offer priced at least `fee_bps` (plus a reasonable safety cushion) inside fair value will fill. The solver's fill-time tolerance check is internal and MUST be wide enough to honor this; a solver whose published fee doesn't fill loses flow. |
@@ -60,7 +60,7 @@ On every merge to the default branch, CI, independently per network directory:
 
 1. Validates every card against the JSON schema (schema lives in the repo); rejects duplicate `name`s, malformed pairs, `min > max`, unknown `version`. Where a card carries `sig`, verifies it against `discovery_pubkey` and rejects on failure.
 2. Flattens the network's cards into one market list, each entry carrying its solver's `name` (and `discovery_pubkey` when present; `sig` stays in the card, it is not propagated).
-3. Groups by canonical pair identity (`base_asset.id`/`quote_asset.id`); within a pair, sorts ascending by `fee_bps` (best expected execution first).
+3. Groups by id pair (`base_asset.id`, `quote_asset.id`) — never by the ticker label; within a group, sorts ascending by `fee_bps` (best expected execution first).
 4. Emits one index per network — `mainnet.json`, `signet.json`, `mutinynet.json` — each stamped with its `network`, `generated_at` (unix seconds, set by CI, never by hand), and the source commit hash.
 5. Publishes via GitHub Pages / raw URL. A broken card in one network must not block publishing the others.
 
@@ -72,11 +72,11 @@ On every merge to the default branch, CI, independently per network directory:
   "commit": "<git sha>",
   "markets": [
     {
-      "pair": "BTC/DePix",
-      "base_asset": { "id": "btc", "name": "Bitcoin", "ticker": "BTC", "precision": 8 },
-      "quote_asset": { "id": "<68-hex AssetId>", "name": "Decentralized Pix", "ticker": "DePix", "precision": 8 },
+      "pair": "BTC/USDT",
       "solver": "arklabs-solver",
       "discovery_pubkey": "<optional>",
+      "base_asset": { "id": "btc", "name": "Bitcoin", "ticker": "BTC", "precision": 8 },
+      "quote_asset": { "id": "<asset-id-hex>", "name": "Tether USD", "ticker": "USDT", "precision": 6 },
       "price_feed": "...",
       "price_decimals": 8,
       "invert": false,
@@ -93,7 +93,7 @@ PR validation runs the same schema checks, so a broken card can't merge. The per
 ## Maker flow
 
 1. For each followed registry, fetch the index for the wallet's network — `<base-url>/<network>.json` (TTL-cache ~10 min). Reject unknown `version` or a `network` mismatch; treat an old `generated_at` (suggested: > 7 days) as a staleness warning. Registry failures are isolated: one unreachable or invalid registry never blocks pricing from the others or from locally pinned cards.
-2. Merge: union of all markets across followed registries plus local cards, tagged with their source. Drop byte-identical duplicates (the same solver listed in two registries); otherwise entries are distinct per source — `name` is only unique within a registry. Re-rank the merged set per pair ascending by `fee_bps`, source order as tiebreak. Filter by pair and size bounds. The ranking is a static proxy — the actual execution price still comes from the feed.
+2. Merge: union of all markets across followed registries plus local cards, tagged with their source. Drop byte-identical duplicates (the same solver listed in two registries); otherwise entries are distinct per source — `name` is only unique within a registry. Re-rank the merged set per id pair (`base_asset.id`, `quote_asset.id`) ascending by `fee_bps`, source order as tiebreak; the `pair` ticker label is display only and never a grouping key. Filter by id pair and size bounds. The ranking is a static proxy — the actual execution price still comes from the feed.
 3. Local cards: a client MUST let its user add solver cards directly (a URL to a raw card, or pasted JSON), validated against the same card schema, scoped to a network by the user. Local cards participate in the merge like any registry entry, marked as user-added in any UI.
 4. Fetch the chosen market's `price_feed`, derive `P` in quote-units-per-base-unit via `invert` and `price_decimals`.
 5. Compute `wantAmount` (below), then the existing flow: `createOffer` → fund the address with the TLV extension.
@@ -156,7 +156,7 @@ One per (solver, pair):
 kind: 38173
 pubkey: <discovery_pubkey>
 tags:
-  ["d", "<base-id>/<quote-id>"]
+  ["d", "<base-id>/<quote-id>"]   // ids, not tickers — the d tag is an identity, labels collide
   ["expiration", "<created_at + 30>"]        // NIP-40
 content: {
   "v": 1,
