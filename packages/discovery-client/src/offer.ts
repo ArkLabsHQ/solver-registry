@@ -2,14 +2,14 @@
 //
 // `planOffer` ties the pieces together for a client that wants to fund an
 // Arkade offer from either side: either "I will deposit this much" or "I want to
-// receive this much". It does not perform a swap; `quoteOffer` only adds the
-// price-feed fetch so the output is ready for createOffer/funding code.
+// receive this much". `quoteOffer` only adds the price-feed fetch so the output
+// is ready for createOffer/funding code.
 
 import type { AssetInfo, Market } from "./types.ts";
 import {
   DEFAULT_SAFETY_BPS,
+  computeWantAmount,
   deriveAtomicPrice,
-  quoteMarket,
   withinBaseLimits,
   type Direction,
   type Rational,
@@ -134,9 +134,14 @@ export function planOffer(input: PlanOfferInput): OfferPlan {
 
   if (hasGiveAmount) {
     depositAtomic = inputAmount(input.giveAmount, depositAsset.precision);
-    const q = quoteMarket({ market, feedValue: input.feedValue, deposit: depositAtomic, direction, safetyBps });
-    receiveAtomic = q.wantAmount;
-    baseAmount = q.baseAmount;
+    receiveAtomic = computeWantAmount({
+      deposit: depositAtomic,
+      direction,
+      price,
+      feeBps: market.fee_bps,
+      safetyBps,
+    });
+    baseAmount = direction === "baseToQuote" ? depositAtomic : receiveAtomic;
   } else {
     receiveAtomic = inputAmount(input.wantAmount, receiveAsset.precision);
     depositAtomic = depositForWant({
@@ -180,7 +185,7 @@ export type QuoteOfferOptions = FetchFeedOptions & {
 
 /**
  * Fetch the market's advertised `price_feed`, then build an offer plan. This
- * quotes an offer; it does not perform or submit a swap.
+ * quotes an offer; it does not submit or fund anything.
  */
 export async function quoteOffer(market: Market, opts: QuoteOfferOptions): Promise<OfferPlan> {
   const hasGiveAmount = opts.giveAmount !== undefined;

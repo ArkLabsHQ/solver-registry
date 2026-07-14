@@ -21,7 +21,7 @@ export const DEFAULT_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
 /**
  * Whether an index is older than `maxAgeSeconds` (default 7 days) relative to
- * `now` (unix seconds, default wall clock). Pure — usable on a cached index
+ * `now` (unix seconds, default wall clock). Pure — usable on an already-held index
  * without refetching.
  */
 export function isIndexStale(
@@ -298,7 +298,7 @@ export function listMarketPairs<T extends IndexMarket>(markets: T[]): MarketPair
 }
 
 export interface BestMarketOptions extends SelectOptions {
-  /** Zero-based match offset. Use 1 to retry with the second-ranked market. */
+  /** Zero-based match offset. Use 1 to select the second-ranked market. */
   cursor?: number;
 }
 

@@ -88,11 +88,11 @@ await discover({ registries, fetchImpl: myFetch });
 | `discover(opts)` | Fetch + merge + dedupe + rank markets across registries and local cards. Defaults to `network: "bitcoin"`. Registry failures are isolated. |
 | `fetchIndex(url, opts)` | Fetch + validate a single per-network index (never throws). Defaults to `network: "bitcoin"`. |
 | `listMarketPairs(markets)` | List available id pairs and how many solver candidates each pair has. |
-| `selectMarkets(markets, {baseId, quoteId, baseAmount?})` / `bestMarket(..., {cursor?})` | Filter to one id pair (and size), keeping the ranking. `cursor: 1` selects the second-ranked market for retries. |
+| `selectMarkets(markets, {baseId, quoteId, baseAmount?})` / `bestMarket(..., {cursor?})` | Filter to one id pair (and size), keeping the ranking. `cursor: 1` selects the second-ranked market. |
 | `quoteOffer(market, {give, giveAmount \| wantAmount, safetyBps?})` | Fetch the feed and build a full `OfferPlan` (human in/out). |
 | `planOffer({market, give, giveAmount \| wantAmount, feedValue, safetyBps?})` | Same, from an already-fetched feed value (pure/sync). |
 | `priceMarket(market, {deposit, direction, safetyBps?})` | Lower-level: fetch feed → atomic `Quote` (`wantAmount`). |
-| `fetchFeedValue(url, {feedCache?, feedCacheTtlMs?, rateLimitRetries?})` | Fetch a raw feed value with optional caller-owned cache and 429 retry handling. |
+| `fetchFeedValue(url, {extractPrice?})` | Fetch a raw feed value and extract the price. |
 | `quoteMarket` / `deriveAtomicPrice` / `computeWantAmount` | Pure pricing primitives (exact rationals / BigInt). |
 | `toAtomic` / `fromAtomic` / `displayPrice` | Precision-aware conversion. |
 | `validateCard` / `validateIndex` | Dependency-free, `eval`-free schema validation. |
@@ -106,13 +106,13 @@ absorbs feed movement between funding and fill.
 
 ## Roadmap
 
-**Chained (multi-hop) swaps** — not yet supported: `bestMarket`/`quoteOffer` match
+**Chained (multi-hop) offers** — not yet supported: `bestMarket`/`quoteOffer` match
 direct `(baseId, quoteId)` pairs only. Planned: treat markets as directed edges
 over canonical asset ids and route through intermediates (BTC → USDT → USDC)
 via `findRoutes` / `planRoute` / `quoteRoute`, ranking routes by the compounded
 net multiplier `∏(1 − (fee_bps + safety_bps)/10000)` and checking size limits
 per hop at plan time. Note the protocol caveat: each hop executes as a separate
-Arkade offer, so a chained swap is **not atomic** — plans are indicative and
+Arkade offer, so a chained route is **not atomic** — plans are indicative and
 routing will be opt-in, never a silent fallback inside `quoteOffer()`. Full spec and
 API design: [#1](https://github.com/arkade-os/solver-registry/issues/1).
 
