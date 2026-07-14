@@ -11,7 +11,7 @@ function validIndex(): any {
   const card = validCard();
   return {
     version: 0,
-    network: "mainnet",
+    network: "bitcoin",
     generated_at: 1_700_000_000,
     commit: "a".repeat(40),
     markets: [{ ...card.markets[0], solver: "alice" }],
@@ -65,7 +65,7 @@ for (const { name, mutate, expect } of CARD_REJECTIONS) {
 }
 
 test("validateIndex: accepts a well-formed index", () => {
-  const r = validateIndex(validIndex(), "mainnet");
+  const r = validateIndex(validIndex(), "bitcoin");
   assert.equal(r.ok, true, JSON.stringify(r.errors));
 });
 
@@ -73,7 +73,7 @@ test("validateIndex: tolerates unknown forward-compatible fields", () => {
   const idx = validIndex();
   idx.future_field = 123;
   idx.markets[0].future_market_field = "x";
-  assert.equal(validateIndex(idx, "mainnet").ok, true);
+  assert.equal(validateIndex(idx, "bitcoin").ok, true);
 });
 
 test("validateIndex: rejects unknown version", () => {
@@ -92,7 +92,7 @@ test("validateIndex: rejects a bad commit and a market missing solver", () => {
   const idx = validIndex();
   idx.commit = "nothex";
   delete idx.markets[0].solver;
-  const r = validateIndex(idx, "mainnet");
+  const r = validateIndex(idx, "bitcoin");
   assert.equal(r.ok, false);
   assert.match(r.errors.join("\n"), /commit/);
   assert.match(r.errors.join("\n"), /solver/);

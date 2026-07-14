@@ -10,7 +10,7 @@ import addFormats from "ajv-formats";
 import cardSchema from "../schema/card.schema.json" with { type: "json" };
 import { verifyCardSig } from "./canonical.ts";
 
-export const NETWORKS = ["mainnet", "signet", "mutinynet"] as const;
+export const NETWORKS = ["bitcoin", "signet", "mutinynet"] as const;
 export type Network = (typeof NETWORKS)[number];
 
 export interface AssetInfo {

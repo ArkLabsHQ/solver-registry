@@ -92,7 +92,7 @@
   </footer>
 </main>
 <script>
-const NETWORKS = ["mainnet", "signet", "mutinynet"];
+const NETWORKS = ["bitcoin", "signet", "mutinynet"];
 const REFRESH_MS = 30_000;
 
 // One in-flight/settled promise per feed URL per refresh cycle, so N markets
@@ -117,7 +117,7 @@ function extractPrice(body) {
 
 // Explorer per network, for linking asset pair sides to their asset page.
 const EXPLORERS = {
-  mainnet: "https://arkade.space",
+  bitcoin: "https://arkade.space",
   signet: "https://explorer.signet.arkade.sh",
   mutinynet: "https://explorer.mutinynet.arkade.sh",
 };

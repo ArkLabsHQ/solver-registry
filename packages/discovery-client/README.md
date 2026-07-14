@@ -26,8 +26,7 @@ import { discover, bestMarket, swap } from "@arkade-os/solver-discovery";
 
 // 1. Fetch + merge the registries you follow (plus any pinned local cards).
 const { markets, warnings } = await discover({
-  registries: ["https://arkade-os.github.io/solver-registry/mainnet.json"],
-  network: "mainnet",
+  registries: ["https://arkade-os.github.io/solver-registry/bitcoin.json"],
 });
 
 // 2. Pick the best market for a pair (grouped by canonical asset id, best fee first).
@@ -67,9 +66,8 @@ schema), participating in the merge like any registry entry:
 
 ```ts
 const { markets } = await discover({
-  registries: ["https://arkade-os.github.io/solver-registry/mainnet.json"],
-  localCards: [{ card: pastedCardJson, network: "mainnet" }],
-  network: "mainnet",
+  registries: ["https://arkade-os.github.io/solver-registry/bitcoin.json"],
+  localCards: [{ card: pastedCardJson }],
 });
 ```
 
@@ -80,15 +78,15 @@ you target an older runtime without global `fetch`, inject one:
 
 ```ts
 import { discover } from "@arkade-os/solver-discovery";
-await discover({ registries, network: "mainnet", fetchImpl: myFetch });
+await discover({ registries, fetchImpl: myFetch });
 ```
 
 ## API
 
 | Export | Purpose |
 |---|---|
-| `discover(opts)` | Fetch + merge + dedupe + rank markets across registries and local cards. Registry failures are isolated. |
-| `fetchIndex(url, opts)` | Fetch + validate a single per-network index (never throws). |
+| `discover(opts)` | Fetch + merge + dedupe + rank markets across registries and local cards. Defaults to `network: "bitcoin"`. Registry failures are isolated. |
+| `fetchIndex(url, opts)` | Fetch + validate a single per-network index (never throws). Defaults to `network: "bitcoin"`. |
 | `selectMarkets(markets, {baseId, quoteId, baseAmount?})` / `bestMarket(...)` | Filter to one id pair (and size), keeping the ranking. |
 | `swap(market, {give, giveAmount, safetyBps?})` | Fetch the feed and build a full `SwapPlan` (human in/out). |
 | `planSwap({market, give, giveAmount, feedValue, safetyBps?})` | Same, from an already-fetched feed value (pure/sync). |

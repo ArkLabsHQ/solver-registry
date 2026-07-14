@@ -17,13 +17,13 @@ function idxMarket(solver: string, fee: number) {
 }
 
 function index(commit: string, markets: unknown[]) {
-  return JSON.stringify({ version: 0, network: "mainnet", generated_at: GENERATED_AT, commit, markets });
+  return JSON.stringify({ version: 0, network: "bitcoin", generated_at: GENERATED_AT, commit, markets });
 }
 
 // Registry A: alice(30), bob(20). Registry B: alice(30) [dup], carol(25).
-const REG_A = "https://reg-a.example.com/mainnet.json";
-const REG_B = "https://reg-b.example.com/mainnet.json";
-const REG_BAD = "https://reg-bad.example.com/mainnet.json";
+const REG_A = "https://reg-a.example.com/bitcoin.json";
+const REG_B = "https://reg-b.example.com/bitcoin.json";
+const REG_BAD = "https://reg-bad.example.com/bitcoin.json";
 const FEED = "https://feed.example.com/btcusdt";
 
 function daveCard() {
@@ -37,15 +37,15 @@ const routes = {
   [FEED]: { body: JSON.stringify({ price: "65000" }) },
 };
 
-test("fetchIndex: fetches and validates a good index", async () => {
-  const r = await fetchIndex(REG_A, { network: "mainnet", fetchImpl: mockFetch(routes), now: NOW });
+test("fetchIndex: fetches and validates a good index with bitcoin as the default network", async () => {
+  const r = await fetchIndex(REG_A, { fetchImpl: mockFetch(routes), now: NOW });
   assert.equal(r.ok, true, r.error);
   assert.equal(r.index!.markets.length, 2);
   assert.deepEqual(r.warnings, []);
 });
 
 test("fetchIndex: never throws on a failing registry", async () => {
-  const r = await fetchIndex(REG_BAD, { network: "mainnet", fetchImpl: mockFetch(routes), now: NOW });
+  const r = await fetchIndex(REG_BAD, { network: "bitcoin", fetchImpl: mockFetch(routes), now: NOW });
   assert.equal(r.ok, false);
   assert.match(r.error!, /HTTP 500/);
 });
@@ -58,7 +58,7 @@ test("fetchIndex: rejects a network mismatch", async () => {
 
 test("fetchIndex: flags a stale index", async () => {
   const staleNow = GENERATED_AT + 8 * 24 * 60 * 60;
-  const r = await fetchIndex(REG_A, { network: "mainnet", fetchImpl: mockFetch(routes), now: staleNow });
+  const r = await fetchIndex(REG_A, { network: "bitcoin", fetchImpl: mockFetch(routes), now: staleNow });
   assert.equal(r.ok, true);
   assert.match(r.warnings.join(" "), /stale/);
 });
@@ -66,8 +66,7 @@ test("fetchIndex: flags a stale index", async () => {
 test("discover: merges registries + local card, dedupes, ranks; isolates failures", async () => {
   const res = await discover({
     registries: [REG_A, REG_BAD, REG_B],
-    localCards: [{ card: daveCard(), network: "mainnet" }],
-    network: "mainnet",
+    localCards: [{ card: daveCard(), network: "bitcoin" }],
     fetchImpl: mockFetch(routes),
     now: NOW,
   });
@@ -93,8 +92,8 @@ test("discover: merges registries + local card, dedupes, ranks; isolates failure
 
 test("discover: skips an invalid local card with a warning", async () => {
   const res = await discover({
-    localCards: [{ card: { version: 0, name: "Bad Name", markets: [] }, network: "mainnet", label: "pinned" }],
-    network: "mainnet",
+    localCards: [{ card: { version: 0, name: "Bad Name", markets: [] }, network: "bitcoin", label: "pinned" }],
+    network: "bitcoin",
     fetchImpl: mockFetch(routes),
     now: NOW,
   });
@@ -105,7 +104,7 @@ test("discover: skips an invalid local card with a warning", async () => {
 test("discover: skips a local card scoped to another network", async () => {
   const res = await discover({
     localCards: [{ card: daveCard(), network: "signet" }],
-    network: "mainnet",
+    network: "bitcoin",
     fetchImpl: mockFetch(routes),
     now: NOW,
   });
@@ -113,11 +112,21 @@ test("discover: skips a local card scoped to another network", async () => {
   assert.match(res.warnings.join("\n"), /targets signet/);
 });
 
+test("discover: local cards inherit the default bitcoin network", async () => {
+  const res = await discover({
+    localCards: [{ card: daveCard() }],
+    fetchImpl: mockFetch(routes),
+    now: NOW,
+  });
+  assert.equal(res.markets.length, 1);
+  assert.equal(res.markets[0].solver, "dave");
+});
+
 test("selectMarkets / bestMarket: filter by id pair and size, keep ranking", async () => {
   const res = await discover({
     registries: [REG_A, REG_B],
-    localCards: [{ card: daveCard(), network: "mainnet" }],
-    network: "mainnet",
+    localCards: [{ card: daveCard(), network: "bitcoin" }],
+    network: "bitcoin",
     fetchImpl: mockFetch(routes),
     now: NOW,
   });
@@ -133,8 +142,8 @@ test("selectMarkets / bestMarket: filter by id pair and size, keep ranking", asy
 test("priceMarket: end-to-end from discovered market to exact want amount", async () => {
   const res = await discover({
     registries: [REG_A, REG_B],
-    localCards: [{ card: daveCard(), network: "mainnet" }],
-    network: "mainnet",
+    localCards: [{ card: daveCard(), network: "bitcoin" }],
+    network: "bitcoin",
     fetchImpl: mockFetch(routes),
     now: NOW,
   });

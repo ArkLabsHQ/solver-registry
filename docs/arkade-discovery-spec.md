@@ -14,7 +14,7 @@ Trust anchors to each registry repo and its PR review, not to keys. A live-quote
 
 ## Solver card
 
-One file per solver per network, `solvers/<network>/<name>.json` (networks: `mainnet`, `signet`, `mutinynet` — same partitioning as arkade-os/asset-registry), submitted and updated by PR. The network lives in the path, not the card: asset IDs are network-scoped, so a pair is only meaningful within its directory, and a solver active on several networks files one card per network.
+One file per solver per network, `solvers/<network>/<name>.json` (networks: `bitcoin`, `signet`, `mutinynet` — same partitioning as arkade-os/asset-registry), submitted and updated by PR. The network lives in the path, not the card: asset IDs are network-scoped, so a pair is only meaningful within its directory, and a solver active on several networks files one card per network.
 
 ```json
 {
@@ -61,13 +61,13 @@ On every merge to the default branch, CI, independently per network directory:
 1. Validates every card against the JSON schema (schema lives in the repo); rejects duplicate `name`s, malformed pairs, `min > max`, unknown `version`. Where a card carries `sig`, verifies it against `discovery_pubkey` and rejects on failure.
 2. Flattens the network's cards into one market list, each entry carrying its solver's `name` (and `discovery_pubkey` when present; `sig` stays in the card, it is not propagated).
 3. Groups by id pair (`base_asset.id`, `quote_asset.id`) — never by the ticker label; within a group, sorts ascending by `fee_bps` (best expected execution first).
-4. Emits one index per network — `mainnet.json`, `signet.json`, `mutinynet.json` — each stamped with its `network`, `generated_at` (unix seconds, set by CI, never by hand), and the source commit hash.
+4. Emits one index per network — `bitcoin.json`, `signet.json`, `mutinynet.json` — each stamped with its `network`, `generated_at` (unix seconds, set by CI, never by hand), and the source commit hash.
 5. Publishes via GitHub Pages / raw URL. A broken card in one network must not block publishing the others.
 
 ```json
 {
   "version": 0,
-  "network": "mainnet",
+  "network": "bitcoin",
   "generated_at": 1783958400,
   "commit": "<git sha>",
   "markets": [
@@ -92,7 +92,7 @@ PR validation runs the same schema checks, so a broken card can't merge. The per
 
 ## Maker flow
 
-1. For each followed registry, fetch the index for the wallet's network — `<base-url>/<network>.json` (TTL-cache ~10 min). Reject unknown `version` or a `network` mismatch; treat an old `generated_at` (suggested: > 7 days) as a staleness warning. Registry failures are isolated: one unreachable or invalid registry never blocks pricing from the others or from locally pinned cards.
+1. For each followed registry, fetch the index for the wallet's network — `<base-url>/<network>.json` (TTL-cache ~10 min). Network names follow `arkade-os/ts-sdk`; `bitcoin` is the default main Bitcoin network. Reject unknown `version` or a `network` mismatch; treat an old `generated_at` (suggested: > 7 days) as a staleness warning. Registry failures are isolated: one unreachable or invalid registry never blocks pricing from the others or from locally pinned cards.
 2. Merge: union of all markets across followed registries plus local cards, tagged with their source. Drop byte-identical duplicates (the same solver listed in two registries); otherwise entries are distinct per source — `name` is only unique within a registry. Re-rank the merged set per id pair (`base_asset.id`, `quote_asset.id`) ascending by `fee_bps`, source order as tiebreak; the `pair` ticker label is display only and never a grouping key. Filter by id pair and size bounds. The ranking is a static proxy — the actual execution price still comes from the feed.
 3. Local cards: a client MUST let its user add solver cards directly (a URL to a raw card, or pasted JSON), validated against the same card schema, scoped to a network by the user. Local cards participate in the merge like any registry entry, marked as user-added in any UI.
 4. Fetch the chosen market's `price_feed`, derive `P` in quote-units-per-base-unit via `invert` and `price_decimals`.

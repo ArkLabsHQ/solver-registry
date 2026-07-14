@@ -6,8 +6,9 @@
 // portable ESM module with zero Node dependencies — safe to bundle for browsers
 // and Expo / React Native. Keep them in sync with the schemas.
 
-export const NETWORKS = ["mainnet", "signet", "mutinynet"] as const;
+export const NETWORKS = ["bitcoin", "signet", "mutinynet"] as const;
 export type Network = (typeof NETWORKS)[number];
+export const DEFAULT_NETWORK = "bitcoin" as const satisfies Network;
 
 export function isNetwork(value: unknown): value is Network {
   return (NETWORKS as readonly string[]).includes(value as string);

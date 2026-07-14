@@ -1,6 +1,6 @@
 {
   "version": 0,
-  "network": "mainnet",
+  "network": "bitcoin",
   "generated_at": 1700000000,
   "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "markets": [

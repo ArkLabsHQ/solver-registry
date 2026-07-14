@@ -32,7 +32,7 @@ test("determinism: same inputs produce byte-identical output across runs", () =>
 });
 
 test("sort order: within a pair, ascending fee_bps, ties broken by solver name", () => {
-  const result = reduceNetwork(fixture("valid", "solvers"), "mainnet", FIXED_META);
+  const result = reduceNetwork(fixture("valid", "solvers"), "bitcoin", FIXED_META);
   assert.equal(result.ok, true);
   const solvers = result.index!.markets.map((m) => m.solver);
   assert.deepEqual(solvers, ["alice", "carol", "bob"]);
@@ -52,7 +52,7 @@ test("signed card: valid signature verifies and discovery_pubkey propagates to t
 test("mixed: a broken network fails independently without blocking sibling networks", () => {
   const results = reduceAll(fixture("mixed", "solvers"), FIXED_META);
   const byNetwork = Object.fromEntries(results.map((r) => [r.network, r]));
-  assert.equal(byNetwork.mainnet.ok, true);
+  assert.equal(byNetwork.bitcoin.ok, true);
   assert.equal(byNetwork.signet.ok, false);
   assert.equal(byNetwork.mutinynet.ok, true);
 });
@@ -78,7 +78,7 @@ const REJECTION_CASES: Array<{ case: string; expect: string }> = [
 
 for (const { case: caseName, expect } of REJECTION_CASES) {
   test(`rejects: ${caseName}`, () => {
-    const result = reduceNetwork(fixture("invalid", caseName), "mainnet", FIXED_META);
+    const result = reduceNetwork(fixture("invalid", caseName), "bitcoin", FIXED_META);
     assert.equal(result.ok, false, `${caseName} should fail validation`);
     const allMessages = result.errors.flatMap((e) => e.messages).join("\n");
     assert.match(allMessages, new RegExp(expect.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
@@ -90,6 +90,6 @@ test("a card placed outside a known network directory is flagged", () => {
   assert.deepEqual(unknown, ["testnet"]);
 });
 
-test("NETWORKS constant covers mainnet, signet, mutinynet", () => {
-  assert.deepEqual([...NETWORKS], ["mainnet", "signet", "mutinynet"]);
+test("NETWORKS constant covers bitcoin, signet, mutinynet", () => {
+  assert.deepEqual([...NETWORKS], ["bitcoin", "signet", "mutinynet"]);
 });

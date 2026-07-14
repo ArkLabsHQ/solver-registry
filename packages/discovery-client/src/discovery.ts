@@ -4,7 +4,7 @@
 //
 // Isomorphic by design — see `feed.ts` for the injectable transport.
 
-import type { IndexMarket, Network, NetworkIndex } from "./types.ts";
+import { DEFAULT_NETWORK, type IndexMarket, type Network, type NetworkIndex } from "./types.ts";
 import { validateCard, validateIndex } from "./validate.ts";
 import { quoteMarket, withinBaseLimits, type Direction, type Quote } from "./pricing.ts";
 import { fetchText, fetchFeedValue, type FetchLike, type FetchFeedOptions } from "./feed.ts";
@@ -62,6 +62,7 @@ export async function fetchIndex(
   url: string,
   opts: FetchIndexOptions = {},
 ): Promise<FetchIndexResult> {
+  const network = opts.network ?? DEFAULT_NETWORK;
   const warnings: string[] = [];
   let text: string;
   try {
@@ -77,7 +78,7 @@ export async function fetchIndex(
     return { url, ok: false, error: `invalid JSON: ${(e as Error).message}`, warnings };
   }
 
-  const result = validateIndex(parsed, opts.network);
+  const result = validateIndex(parsed, network);
   if (!result.ok) {
     return { url, ok: false, error: `invalid index: ${result.errors.join("; ")}`, warnings };
   }
@@ -95,7 +96,8 @@ export async function fetchIndex(
 /** A user-pinned local card (raw JSON), scoped to a network by the user. */
 export interface LocalCardInput {
   card: unknown;
-  network: Network;
+  /** Defaults to the discovery network, which itself defaults to "bitcoin". */
+  network?: Network;
   /** Optional provenance label; defaults to `local:<card.name>`. */
   label?: string;
 }
@@ -105,7 +107,8 @@ export interface DiscoverOptions extends FetchIndexOptions {
   registries?: string[];
   /** Locally pinned solver cards, validated against the card schema. */
   localCards?: LocalCardInput[];
-  network: Network;
+  /** Expected network. Defaults to "bitcoin", matching ts-sdk's DEFAULT_NETWORK_NAME. */
+  network?: Network;
 }
 
 export interface SourceReport {
@@ -158,6 +161,7 @@ function recordSource(sources: SourceReport[], warnings: string[], report: Sourc
  * `fee_bps`, with source order as the tiebreak.
  */
 export async function discover(opts: DiscoverOptions): Promise<DiscoverResult> {
+  const network = opts.network ?? DEFAULT_NETWORK;
   const sources: SourceReport[] = [];
   const warnings: string[] = [];
   // Entries accumulate in source order (registries first, then local cards);
@@ -167,7 +171,7 @@ export async function discover(opts: DiscoverOptions): Promise<DiscoverResult> {
   let contributing = 0;
 
   const indexResults = await Promise.all(
-    (opts.registries ?? []).map((url) => fetchIndex(url, opts)),
+    (opts.registries ?? []).map((url) => fetchIndex(url, { ...opts, network })),
   );
 
   for (const r of indexResults) {
@@ -191,8 +195,9 @@ export async function discover(opts: DiscoverOptions): Promise<DiscoverResult> {
     }
     const card = result.value!;
     const source = local.label ?? `local:${card.name}`;
-    if (local.network !== opts.network) {
-      const error = `card targets ${local.network}, not ${opts.network}; skipped`;
+    const localNetwork = local.network ?? network;
+    if (localNetwork !== network) {
+      const error = `card targets ${localNetwork}, not ${network}; skipped`;
       recordSource(sources, warnings, { source, sourceType: "local", ok: false, marketCount: 0, error, warnings: [] });
       continue;
     }

@@ -3,7 +3,7 @@
 // React Native with zero runtime dependencies (global `fetch` only).
 //
 // Typical flow:
-//   const { markets } = await discover({ registries: [url], network: "mainnet" });
+//   const { markets } = await discover({ registries: [url] }); // defaults to bitcoin
 //   const market = bestMarket(markets, { baseId: "btc", quoteId: DEPIX_ID });
 //   const plan   = await swap(market, { give: "base", giveAmount: "0.01" });
 //   // plan.receive.display is the human amount received; plan.receive.atomic the
@@ -11,6 +11,7 @@
 
 export {
   NETWORKS,
+  DEFAULT_NETWORK,
   isNetwork,
   type Network,
   type AssetInfo,

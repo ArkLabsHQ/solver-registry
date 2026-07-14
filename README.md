@@ -32,7 +32,7 @@ registries you follow, not to this repo.
 1. Run `solver card` against your `solverd` (or hand-write one) to produce a
    card matching [`schema/card.schema.json`](schema/card.schema.json).
 2. Save it as `solvers/<network>/<name>.json`, where `<network>` is
-   `mainnet`, `signet`, or `mutinynet`, and `<name>` matches the card's
+   `bitcoin`, `signet`, or `mutinynet`, and `<name>` matches the card's
    `name` field (`^[a-z0-9-]+$`).
 3. Open a PR. CI validates the card and tells you if it's malformed.
 
@@ -45,7 +45,7 @@ Human-readable overview: <https://arkade-os.github.io/solver-registry/>
 
 | Network | Index |
 |---|---|
-| Mainnet | <https://arkade-os.github.io/solver-registry/mainnet.json> |
+| Bitcoin | <https://arkade-os.github.io/solver-registry/bitcoin.json> |
 | Signet | <https://arkade-os.github.io/solver-registry/signet.json> |
 | Mutinynet | <https://arkade-os.github.io/solver-registry/mutinynet.json> |
 
@@ -66,7 +66,7 @@ using each asset's precision, and computes the `wantAmount` — down to a one-ca
 ## Repo layout
 
 ```
-solvers/mainnet/    one card per solver, PR-managed
+solvers/bitcoin/    one card per solver, PR-managed
 solvers/signet/
 solvers/mutinynet/
 schema/card.schema.json    what a solver PRs
@@ -108,7 +108,7 @@ which card failed and why without digging through logs.
   path-filtered workflow can block package-only PRs because GitHub skips it.
 - `publish.yml` runs on pushes to `master` that change `solvers/**`:
   re-validates (never publishes on failure), then builds and deploys
-  `mainnet.json` / `signet.json` / `mutinynet.json` to GitHub Pages.
+  `bitcoin.json` / `signet.json` / `mutinynet.json` to GitHub Pages.
 
 ## Run your own registry
 
