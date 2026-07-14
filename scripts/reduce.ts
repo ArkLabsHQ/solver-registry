@@ -20,11 +20,17 @@ export interface AssetInfo {
   precision: number;
 }
 
+export interface PriceFeedSchema {
+  type: "json";
+  price_path: string;
+}
+
 export interface Market {
   pair: string;
   base_asset: AssetInfo;
   quote_asset: AssetInfo;
   price_feed: string;
+  price_feed_schema: PriceFeedSchema;
   price_decimals: number;
   invert: boolean;
   fee_bps: number;

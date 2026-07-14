@@ -331,7 +331,7 @@ export async function priceMarket(
   market: IndexMarket,
   opts: PriceMarketOptions,
 ): Promise<Quote> {
-  const feedValue = await fetchFeedValue(market.price_feed, opts);
+  const feedValue = await fetchFeedValue(market.price_feed, market.price_feed_schema, opts);
   return quoteMarket({
     market,
     feedValue,

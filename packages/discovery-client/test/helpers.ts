@@ -14,6 +14,7 @@ export function makeMarket(overrides: Partial<Market> = {}): Market {
     base_asset: { ...BTC },
     quote_asset: { ...USDT },
     price_feed: "https://feed.example.com/btcusdt",
+    price_feed_schema: { type: "json", price_path: "/price" },
     price_decimals: 0,
     invert: false,
     fee_bps: 30,

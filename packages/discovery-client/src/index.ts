@@ -16,6 +16,7 @@ export {
   isNetwork,
   type Network,
   type AssetInfo,
+  type PriceFeedSchema,
   type Market,
   type Card,
   type IndexMarket,
@@ -64,11 +65,12 @@ export {
 export {
   fetchText,
   fetchFeedValue,
-  defaultPriceExtractor,
+  parseJsonPointer,
+  readJsonPointer,
+  extractFeedPrice,
   type FetchLike,
   type FetchTextOptions,
   type FetchFeedOptions,
-  type PriceExtractor,
 } from "./feed.ts";
 
 export {

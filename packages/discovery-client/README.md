@@ -63,6 +63,21 @@ toAtomic("1.123456789", 8);  // throws: more precision than 8 decimals allow
 Pricing math always stays in atomic units; `quoteOffer()` does the human⇄atomic
 conversion for you using each side's precision.
 
+## Price feed responses
+
+Every market declares both the feed URL and how to read its response:
+
+```json
+{
+  "price_feed": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+  "price_feed_schema": { "type": "json", "price_path": "/bitcoin/usd" }
+}
+```
+
+`price_path` is an RFC 6901 JSON Pointer to a JSON number or numeric string.
+Common examples: Binance ticker price uses `/price`; a bare JSON number uses the
+empty pointer `""`. The client does not scan unknown response shapes.
+
 ## Pin a local card
 
 Users can pin a solver card directly (a raw card, validated against the card
@@ -126,7 +141,7 @@ package entrypoint does not import React.
 | `quoteOffer(market, {give, giveAmount \| wantAmount, safetyBps?})` | Fetch the feed and build a full `OfferPlan` (human in/out). |
 | `planOffer({market, give, giveAmount \| wantAmount, feedValue, safetyBps?})` | Same, from an already-fetched feed value (pure/sync). |
 | `priceMarket(market, {deposit, direction, safetyBps?})` | Lower-level: fetch feed → atomic `Quote` (`wantAmount`). |
-| `fetchFeedValue(url, {extractPrice?})` | Fetch a raw feed value and extract the price. |
+| `fetchFeedValue(url, schema, opts?)` | Fetch a raw feed and extract the numeric price using the market's `price_feed_schema`. |
 | `quoteMarket` / `deriveAtomicPrice` / `computeWantAmount` | Pure pricing primitives (exact rationals / BigInt). |
 | `toAtomic` / `fromAtomic` / `displayPrice` | Precision-aware conversion. |
 | `validateCard` / `validateIndex` | Dependency-free, `eval`-free schema validation. |

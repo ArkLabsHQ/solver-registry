@@ -2,6 +2,8 @@
 // `fetch` and `AbortController` are used, both injectable/overridable so the
 // same code runs in browsers, Node, and Expo / React Native.
 
+import type { PriceFeedSchema } from "./types.ts";
+
 export interface FetchResponse {
   ok: boolean;
   status: number;
@@ -51,37 +53,66 @@ export async function fetchText(url: string, opts: FetchTextOptions = {}): Promi
   }
 }
 
-export type PriceExtractor = (body: unknown) => string | number;
+const JSON_POINTER = /^(?:\/(?:[^~/]|~0|~1)*)*$/;
 
-/** Default feed extractor: a bare number/string, or an object's `price` field. */
-export const defaultPriceExtractor: PriceExtractor = (body) => {
-  if (typeof body === "number" || typeof body === "string") return body;
-  if (body !== null && typeof body === "object" && "price" in body) {
-    const p = (body as Record<string, unknown>).price;
-    if (typeof p === "number" || typeof p === "string") return p;
-  }
-  throw new Error("could not extract a price from the feed response; pass a custom extractPrice");
-};
-
-export interface FetchFeedOptions extends FetchTextOptions {
-  /** Override how the numeric price is pulled out of the feed body. */
-  extractPrice?: PriceExtractor;
+function isNumericFeedValue(value: unknown): value is string | number {
+  if (typeof value === "number") return Number.isFinite(value);
+  return typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value));
 }
+
+export function parseJsonPointer(pointer: string): string[] {
+  if (!JSON_POINTER.test(pointer)) {
+    throw new Error(`invalid JSON Pointer: ${JSON.stringify(pointer)}`);
+  }
+  if (pointer === "") return [];
+  return pointer
+    .slice(1)
+    .split("/")
+    .map((part) => part.replace(/~1/g, "/").replace(/~0/g, "~"));
+}
+
+export function readJsonPointer(body: unknown, pointer: string): unknown {
+  let value = body;
+  for (const token of parseJsonPointer(pointer)) {
+    if (
+      value === null ||
+      typeof value !== "object" ||
+      !Object.prototype.hasOwnProperty.call(value, token)
+    ) {
+      throw new Error(`price path ${JSON.stringify(pointer)} not found in feed response`);
+    }
+    value = (value as Record<string, unknown>)[token];
+  }
+  return value;
+}
+
+export function extractFeedPrice(body: unknown, schema: PriceFeedSchema): string | number {
+  if (schema.type !== "json") throw new Error(`unsupported price feed schema type: ${schema.type}`);
+  const value = readJsonPointer(body, schema.price_path);
+  if (!isNumericFeedValue(value)) {
+    throw new Error(`price path ${JSON.stringify(schema.price_path)} did not resolve to a numeric value`);
+  }
+  return value;
+}
+
+export type FetchFeedOptions = FetchTextOptions;
 
 /**
  * Fetch a price feed URL and extract its numeric value. Feeds may return JSON
- * (`{"price":"65000.00"}`) or a bare number as text; both are handled.
+ * objects (e.g. `{"price":"65000.00"}`) or a bare JSON number/string. The
+ * market's `price_feed_schema.price_path` selects the scalar value.
  */
 export async function fetchFeedValue(
   url: string,
+  schema: PriceFeedSchema,
   opts: FetchFeedOptions = {},
 ): Promise<string | number> {
   const text = await fetchText(url, opts);
   let body: unknown;
   try {
     body = JSON.parse(text);
-  } catch {
-    body = text.trim();
+  } catch (err) {
+    throw new Error(`price feed response is not JSON: ${(err as Error).message}`);
   }
-  return (opts.extractPrice ?? defaultPriceExtractor)(body);
+  return extractFeedPrice(body, schema);
 }

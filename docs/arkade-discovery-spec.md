@@ -28,6 +28,7 @@ One file per solver per network, `solvers/<network>/<name>.json` (networks: `bit
       "base_asset": { "id": "btc", "name": "Bitcoin", "ticker": "BTC", "precision": 8 },
       "quote_asset": { "id": "<asset-id-hex>", "name": "Tether USD", "ticker": "USDT", "precision": 6 },
       "price_feed": "https://feed.example.com/price?pair=...",
+      "price_feed_schema": { "type": "json", "price_path": "/price" },
       "price_decimals": 8,
       "invert": false,
       "fee_bps": 30,
@@ -47,7 +48,8 @@ Field semantics:
 | `sig` | Optional in v0, required in v1. BIP340 Schnorr by `discovery_pubkey` over `sha256(canonical_json)`: the card serialized with `sig` removed, keys sorted lexicographically, no whitespace, UTF-8. If present, `discovery_pubkey` is required and CI MUST verify; if absent, the PR is the authentication. |
 | `pair` | Human-readable label `<base-ticker>/<quote-ticker>` (e.g. `BTC/USDT`); MUST equal the two asset objects' tickers, CI enforces. Display only — NOT an identity. The market's identity is the id pair (`base_asset.id`, `quote_asset.id`): tickers collide, ids don't. Asset-to-asset pairs are first-class; nothing assumes bitcoin on either side. |
 | `base_asset`, `quote_asset` | Per-side asset descriptor: `id` (the canonical identity: `btc` or the serialized AssetId in lowercase hex), `name`, `ticker`, `precision` (decimal places of the atomic unit, e.g. 8 for BTC ⇒ amounts in sats). `precision` is for rendering amounts like `min_base_amount`; it plays no role in pricing math, which stays in atomic units. `name`/`ticker` are unverified labels the solver chose — anyone can call an asset "USDT". Clients MUST group, dedupe, and price by `id` only and MAY badge verification via the asset registry. |
-| `price_feed` | The exact URL the solver's plugin validates against at fill time. Makers MUST price from this URL, not a substitute. MUST be fetchable from browsers (CORS-permissive), otherwise browser wallets cannot price the pair. |
+| `price_feed` | The exact URL the solver's plugin validates against at fill time. Makers MUST price from this URL, not a substitute. MUST be fetchable from browsers (CORS-permissive), otherwise browser wallets cannot price the pair. The response MUST be JSON. |
+| `price_feed_schema` | How to read the numeric feed value from the response. v0 supports `{ "type": "json", "price_path": "<RFC 6901 JSON Pointer>" }`. Examples: Binance ticker price uses `/price`; CoinGecko simple price for `ids=bitcoin&vs_currencies=usd` uses `/bitcoin/usd`; a bare JSON number uses the empty pointer `""`. The pointer MUST resolve to a JSON number or numeric string. Clients MUST NOT infer by scanning arbitrary response bodies. |
 | `price_decimals`, `invert` | How to normalize the feed's value to quote-units-per-base-unit. Mirrors the solver Pair config. |
 | `fee_bps` | The solver's spread: the promise is that an offer priced at least `fee_bps` (plus a reasonable safety cushion) inside fair value will fill. The solver's fill-time tolerance check is internal and MUST be wide enough to honor this; a solver whose published fee doesn't fill loses flow. |
 | `min_base_amount`, `max_base_amount` | Trade size bounds expressed in base-asset units (sats only when base is BTC). The bound applies to the base side of the trade regardless of direction: the deposit when depositing base, the `wantAmount` when wanting base. This keeps limits meaningful for non-BTC pairs. |
@@ -78,6 +80,7 @@ On every merge to the default branch, CI, independently per network directory:
       "base_asset": { "id": "btc", "name": "Bitcoin", "ticker": "BTC", "precision": 8 },
       "quote_asset": { "id": "<asset-id-hex>", "name": "Tether USD", "ticker": "USDT", "precision": 6 },
       "price_feed": "...",
+      "price_feed_schema": { "type": "json", "price_path": "/price" },
       "price_decimals": 8,
       "invert": false,
       "fee_bps": 30,
@@ -95,7 +98,7 @@ PR validation runs the same schema checks, so a broken card can't merge. The per
 1. For each followed registry, fetch the index for the wallet's network — `<base-url>/<network>.json` (TTL-cache ~10 min). Network names follow `arkade-os/ts-sdk`; `bitcoin` is the default main Bitcoin network. Reject unknown `version` or a `network` mismatch; treat an old `generated_at` (suggested: > 7 days) as a staleness warning. Registry failures are isolated: one unreachable or invalid registry never blocks pricing from the others or from locally pinned cards.
 2. Merge: union of all markets across followed registries plus local cards, tagged with their source. Drop byte-identical duplicates (the same solver listed in two registries); otherwise entries are distinct per source — `name` is only unique within a registry. Re-rank the merged set per id pair (`base_asset.id`, `quote_asset.id`) ascending by `fee_bps`, source order as tiebreak; the `pair` ticker label is display only and never a grouping key. Filter by id pair and size bounds. The ranking is a static proxy — the actual execution price still comes from the feed.
 3. Local cards: a client MUST let its user add solver cards directly (a URL to a raw card, or pasted JSON), validated against the same card schema, scoped to a network by the user. Local cards participate in the merge like any registry entry, marked as user-added in any UI.
-4. Fetch the chosen market's `price_feed`, derive `P` in quote-units-per-base-unit via `invert` and `price_decimals`.
+4. Fetch the chosen market's `price_feed`, parse the JSON response, read the scalar selected by `price_feed_schema.price_path`, then derive `P` in quote-units-per-base-unit via `invert` and `price_decimals`.
 5. Compute `wantAmount` (below), then the existing flow: `createOffer` → fund the address with the TLV extension.
 
 There is no liveness signal in v0: solvers are not publicly reachable, so nothing can be probed before funding. `generated_at` and local fill history are the only heuristics. The cost of funding into a dead solver is one cancel transaction.
@@ -125,6 +128,8 @@ The trust anchor is each registry repo the client follows: PR review is the list
 **Why is the solver's fill tolerance not in the card?** It's an internal enforcement knob, not a promise to the client. The client-meaningful number is `fee_bps`: concede that plus a cushion and the offer should fill. Publishing tolerance would leak an implementation parameter, drag derived rules into client code, and tempt clients to price against the band's edge — exactly the offers most likely to sit unfilled under feed divergence.
 
 **Why `fee_bps` as the sort key?** It's the only static, client-meaningful cost of trading against a market. Feeds move; this doesn't, so it's the only honest ranking a static index can make.
+
+**Why JSON Pointer for price feeds?** Existing price APIs are not uniform: Binance exposes a top-level `price`, while CoinGecko's simple endpoint nests by coin and currency. Scanning a response for "the only number" breaks as soon as the provider adds metadata or multiple currencies. JSON Pointer is an IETF-standard way to select exactly one value from a JSON document; JSONPath is more expressive but can select sets of values, which is unnecessary for a price scalar and harder to validate consistently across runtimes.
 
 **Why no `ark_server` or any solver URL?** URLs couple the registry to infrastructure that can be seized, moved, or rotated, and clients have no reason to contact it.
 

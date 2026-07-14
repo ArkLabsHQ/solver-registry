@@ -200,7 +200,7 @@ export type QuoteOfferOptions = FetchFeedOptions & {
  */
 export async function quoteOffer(market: Market, opts: QuoteOfferOptions): Promise<OfferPlan> {
   const offerAmount = resolveOfferAmount(opts);
-  const feedValue = await fetchFeedValue(market.price_feed, opts);
+  const feedValue = await fetchFeedValue(market.price_feed, market.price_feed_schema, opts);
   if (offerAmount.kind === "give") {
     return planOffer({
       market,

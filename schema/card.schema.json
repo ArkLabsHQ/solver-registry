@@ -48,6 +48,25 @@
           "description": "Number of decimals: base-units per display unit = 10^precision."
         }
       }
+    },
+    "priceFeedSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "price_path"
+      ],
+      "properties": {
+        "type": {
+          "const": "json",
+          "description": "The price feed response is JSON."
+        },
+        "price_path": {
+          "type": "string",
+          "pattern": "^(?:/(?:[^~/]|~0|~1)*)*$",
+          "description": "RFC 6901 JSON Pointer to the numeric feed value, e.g. /price or /bitcoin/usd. Empty string selects the whole JSON document."
+        }
+      }
     }
   },
   "properties": {
@@ -80,6 +99,7 @@
           "base_asset",
           "quote_asset",
           "price_feed",
+          "price_feed_schema",
           "price_decimals",
           "invert",
           "fee_bps",
@@ -104,6 +124,9 @@
             "type": "string",
             "format": "uri",
             "pattern": "^https://"
+          },
+          "price_feed_schema": {
+            "$ref": "#/definitions/priceFeedSchema"
           },
           "price_decimals": {
             "type": "integer",

@@ -18,6 +18,10 @@
         "precision": 8
       },
       "price_feed": "https://feed.example.com/price?pair=btcusd",
+      "price_feed_schema": {
+        "type": "json",
+        "price_path": "/price"
+      },
       "price_decimals": 8,
       "invert": false,
       "fee_bps": 25,
@@ -25,5 +29,5 @@
       "max_base_amount": 5000000
     }
   ],
-  "sig": "0c3d229d3f1e65e506bae891ea6bba15f64e52106a6ffd8abf0d588bcd2aa19382ffa30c065b80bb6f9d753ea17d2686cba876dc7fdfbabacb4e5e30d944fc13"
+  "sig": "22175db6ea3e7581c5306a02c04ccbbc2bf844d8f0670534c403d979f05f781f26986434e8a2a6d46abc4ab984e73c82e64de2175e5de5dd869a3a284fb624cd"
 }

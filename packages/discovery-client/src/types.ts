@@ -24,6 +24,13 @@ export interface AssetInfo {
   precision: number;
 }
 
+/** How to read a numeric price from the `price_feed` response. */
+export interface PriceFeedSchema {
+  type: "json";
+  /** RFC 6901 JSON Pointer to the numeric feed value, e.g. "/price" or "/bitcoin/usd". */
+  price_path: string;
+}
+
 /** A single market as advertised by a solver. */
 export interface Market {
   /** Display label "<base-ticker>/<quote-ticker>"; identity is (base_asset.id, quote_asset.id). */
@@ -32,6 +39,8 @@ export interface Market {
   quote_asset: AssetInfo;
   /** Exact URL the maker MUST price from. CORS-permissive so browsers can fetch it. */
   price_feed: string;
+  /** Response contract for `price_feed`; clients MUST use this to extract the feed value. */
+  price_feed_schema: PriceFeedSchema;
   /** How to normalize the feed value to quote-atomic-units per base-atomic-unit. */
   price_decimals: number;
   invert: boolean;

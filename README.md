@@ -53,7 +53,7 @@ Each index is a flat, pre-sorted (best `fee_bps` first) list of markets for
 that network, stamped with `generated_at` and the source `commit`, matching
 [`schema/index.schema.json`](schema/index.schema.json). Fetch one URL per
 registry you follow, merge, filter by pair, price from the market's
-`price_feed`.
+`price_feed`, and extract the scalar using `price_feed_schema`.
 
 ### Client library
 

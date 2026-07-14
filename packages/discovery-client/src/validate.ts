@@ -22,6 +22,7 @@ const PAIR = /^[A-Za-z0-9._-]{1,16}\/[A-Za-z0-9._-]{1,16}$/;
 const PUBKEY = /^[0-9a-f]{64}$/;
 const SIG = /^[0-9a-f]{128}$/;
 const COMMIT = /^[0-9a-f]{40}$/;
+const JSON_POINTER = /^(?:\/(?:[^~/]|~0|~1)*)*$/;
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -63,6 +64,7 @@ function checkAllowedKeys(errors: string[], path: string, obj: Record<string, un
 }
 
 const ASSET_KEYS = new Set(["id", "name", "ticker", "precision"]);
+const PRICE_FEED_SCHEMA_KEYS = new Set(["type", "price_path"]);
 
 function checkAsset(errors: string[], path: string, v: unknown, strict: boolean): void {
   if (!isObject(v)) {
@@ -76,11 +78,22 @@ function checkAsset(errors: string[], path: string, v: unknown, strict: boolean)
   checkIntRange(errors, `${path}/precision`, v.precision, 0, 18);
 }
 
+function checkPriceFeedSchema(errors: string[], path: string, v: unknown, strict: boolean): void {
+  if (!isObject(v)) {
+    add(errors, path, "must be an object");
+    return;
+  }
+  if (strict) checkAllowedKeys(errors, path, v, PRICE_FEED_SCHEMA_KEYS);
+  if (v.type !== "json") add(errors, `${path}/type`, 'must be "json"');
+  checkPattern(errors, `${path}/price_path`, v.price_path, JSON_POINTER, "must be an RFC 6901 JSON Pointer");
+}
+
 const MARKET_KEYS = new Set([
   "pair",
   "base_asset",
   "quote_asset",
   "price_feed",
+  "price_feed_schema",
   "price_decimals",
   "invert",
   "fee_bps",
@@ -117,6 +130,7 @@ function checkMarket(errors: string[], path: string, v: unknown, strict: boolean
   if (typeof v.price_feed !== "string" || !v.price_feed.startsWith("https://")) {
     add(errors, `${path}/price_feed`, "must be an https:// URL");
   }
+  checkPriceFeedSchema(errors, `${path}/price_feed_schema`, v.price_feed_schema, strict);
   checkIntRange(errors, `${path}/price_decimals`, v.price_decimals, 0, 18);
   if (typeof v.invert !== "boolean") {
     add(errors, `${path}/invert`, "must be a boolean");

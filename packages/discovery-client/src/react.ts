@@ -58,7 +58,6 @@ export function useOfferQuote(
   opts: UseOfferQuoteOptions = {},
 ): UseOfferQuoteResult {
   const {
-    extractPrice,
     fetchImpl,
     give = "base",
     initialGiveAmount,
@@ -143,12 +142,15 @@ export function useOfferQuote(
 
     async function quote() {
       try {
-        const nextFeedValue = await fetchFeedValue(selectedMarket.price_feed, {
-          extractPrice,
-          fetchImpl,
-          signal: controller.signal,
-          timeoutMs,
-        });
+        const nextFeedValue = await fetchFeedValue(
+          selectedMarket.price_feed,
+          selectedMarket.price_feed_schema,
+          {
+            fetchImpl,
+            signal: controller.signal,
+            timeoutMs,
+          },
+        );
         const nextPlan =
           activeInput === "give"
             ? planOffer({
@@ -187,7 +189,7 @@ export function useOfferQuote(
       if (signal && relayAbort) signal.removeEventListener("abort", relayAbort);
       controller.abort();
     };
-  }, [activeAmount, activeInput, extractPrice, fetchImpl, give, market, refreshNonce, safetyBps, signal, timeoutMs]);
+  }, [activeAmount, activeInput, fetchImpl, give, market, refreshNonce, safetyBps, signal, timeoutMs]);
 
   return useMemo(() => {
     const baseAmount = give === "base" ? giveAmount : wantAmount;
