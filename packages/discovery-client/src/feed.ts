@@ -1,12 +1,18 @@
-// Transport helpers shared by discovery and swaps. Isomorphic: only global
+// Transport helpers shared by discovery and offer quoting. Isomorphic: only global
 // `fetch` and `AbortController` are used, both injectable/overridable so the
 // same code runs in browsers, Node, and Expo / React Native.
+
+export interface FetchResponse {
+  ok: boolean;
+  status: number;
+  text(): Promise<string>;
+}
 
 /** Minimal structural subset of `fetch` this library needs; injectable for tests/polyfills. */
 export type FetchLike = (
   input: string,
-  init?: { signal?: AbortSignal; headers?: Record<string, string> },
-) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>;
+  init?: { signal?: AbortSignal },
+) => Promise<FetchResponse>;
 
 export interface FetchTextOptions {
   fetchImpl?: FetchLike;
@@ -29,8 +35,9 @@ export async function fetchText(url: string, opts: FetchTextOptions = {}): Promi
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const timer = setTimeout(() => controller.abort(new Error(`timeout after ${timeoutMs}ms`)), timeoutMs);
   const outer = opts.signal;
-  const onAbort = () => controller.abort(outer!.reason);
+  let onAbort: (() => void) | undefined;
   if (outer) {
+    onAbort = () => controller.abort(outer.reason);
     if (outer.aborted) controller.abort(outer.reason);
     else outer.addEventListener("abort", onAbort, { once: true });
   }
@@ -40,7 +47,7 @@ export async function fetchText(url: string, opts: FetchTextOptions = {}): Promi
     return await res.text();
   } finally {
     clearTimeout(timer);
-    if (outer) outer.removeEventListener("abort", onAbort);
+    if (outer && onAbort) outer.removeEventListener("abort", onAbort);
   }
 }
 
