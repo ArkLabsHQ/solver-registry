@@ -1,0 +1,27 @@
+{
+  "version": 0,
+  "name": "frenchman",
+  "markets": [
+    {
+      "pair": "BTC/USDT",
+      "base_asset": {
+        "id": "btc",
+        "name": "Bitcoin",
+        "ticker": "BTC",
+        "precision": 8
+      },
+      "quote_asset": {
+        "id": "f121ac9b7656797cc68d1e8fecacfbaa2069ec1461edf0bf2f3c37404cb9791a0000",
+        "name": "USDT",
+        "ticker": "USDT",
+        "precision": 2
+      },
+      "price_feed": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+      "price_decimals": 6,
+      "invert": false,
+      "fee_bps": 30,
+      "min_base_amount": 1000,
+      "max_base_amount": 5000000
+    }
+  ]
+}
