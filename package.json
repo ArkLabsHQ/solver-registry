@@ -4,6 +4,14 @@
   "private": true,
   "description": "Arkade Market Discovery Protocol v0 registry: solver cards reduced into per-network indexes",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arkade-os/solver-registry.git"
+  },
+  "bugs": {
+    "url": "https://github.com/arkade-os/solver-registry/issues"
+  },
+  "homepage": "https://arkade-os.github.io/solver-registry/",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "reduce": "node --experimental-strip-types scripts/reduce.ts",

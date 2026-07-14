@@ -1,4 +1,4 @@
-# @arkade/solver-discovery
+# @arkade-os/solver-discovery
 
 A tiny, portable **ESM** client for the consumer (maker) side of the
 [Arkade Market Discovery Protocol](../../docs/arkade-discovery-spec.md): discover
@@ -16,17 +16,17 @@ the price feeds solvers advertise, rank markets, convert amounts, and compute th
 ## Install
 
 ```sh
-npm install @arkade/solver-discovery
+npm install @arkade-os/solver-discovery
 ```
 
 ## Quick start
 
 ```ts
-import { discover, bestMarket, swap } from "@arkade/solver-discovery";
+import { discover, bestMarket, swap } from "@arkade-os/solver-discovery";
 
 // 1. Fetch + merge the registries you follow (plus any pinned local cards).
 const { markets, warnings } = await discover({
-  registries: ["https://arklabshq.github.io/solver-registry/mainnet.json"],
+  registries: ["https://arkade-os.github.io/solver-registry/mainnet.json"],
   network: "mainnet",
 });
 
@@ -50,7 +50,7 @@ Each asset carries a `precision` (8 for BTC and most Arkade assets). Conversion
 between human and atomic units is exact:
 
 ```ts
-import { toAtomic, fromAtomic } from "@arkade/solver-discovery";
+import { toAtomic, fromAtomic } from "@arkade-os/solver-discovery";
 
 toAtomic("1.5", 8);          // => 150000000n
 fromAtomic(150000000n, 8);   // => "1.5"
@@ -67,7 +67,7 @@ schema), participating in the merge like any registry entry:
 
 ```ts
 const { markets } = await discover({
-  registries: ["https://arklabshq.github.io/solver-registry/mainnet.json"],
+  registries: ["https://arkade-os.github.io/solver-registry/mainnet.json"],
   localCards: [{ card: pastedCardJson, network: "mainnet" }],
   network: "mainnet",
 });
@@ -79,7 +79,7 @@ Works out of the box — Hermes ships `fetch`, `AbortController`, and `BigInt`. 
 you target an older runtime without global `fetch`, inject one:
 
 ```ts
-import { discover } from "@arkade/solver-discovery";
+import { discover } from "@arkade-os/solver-discovery";
 await discover({ registries, network: "mainnet", fetchImpl: myFetch });
 ```
 
@@ -111,7 +111,7 @@ net multiplier `∏(1 − (fee_bps + safety_bps)/10000)` and checking size limit
 per hop at plan time. Note the protocol caveat: each hop executes as a separate
 Arkade offer, so a chained swap is **not atomic** — plans are indicative and
 routing will be opt-in, never a silent fallback inside `swap()`. Full spec and
-API design: [#1](https://github.com/ArkLabsHQ/solver-registry/issues/1).
+API design: [#1](https://github.com/arkade-os/solver-registry/issues/1).
 
 ## Develop
 

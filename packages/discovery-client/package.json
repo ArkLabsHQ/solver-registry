@@ -1,5 +1,5 @@
 {
-  "name": "@arkade/solver-discovery",
+  "name": "@arkade-os/solver-discovery",
   "version": "0.1.0",
   "description": "Portable ESM client for discovering solver price feeds from Arkade solver registries (browser / Node / Expo).",
   "license": "MIT",
@@ -17,6 +17,15 @@
     "dist",
     "README.md"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arkade-os/solver-registry.git",
+    "directory": "packages/discovery-client"
+  },
+  "bugs": {
+    "url": "https://github.com/arkade-os/solver-registry/issues"
+  },
+  "homepage": "https://github.com/arkade-os/solver-registry/tree/master/packages/discovery-client#readme",
   "engines": {
     "node": ">=18"
   },

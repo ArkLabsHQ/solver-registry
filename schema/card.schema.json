@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/ArkLabsHQ/solver-registry/schema/card.schema.json",
+  "$id": "https://github.com/arkade-os/solver-registry/schema/card.schema.json",
   "title": "Solver card",
   "description": "One solver's market listing for one network. Path: solvers/<network>/<name>.json",
   "type": "object",

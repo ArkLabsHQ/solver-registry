@@ -41,13 +41,13 @@ valid, the PR is the authentication. See the spec for why.
 
 ## Consume the index
 
-Human-readable overview: <https://arklabshq.github.io/solver-registry/>
+Human-readable overview: <https://arkade-os.github.io/solver-registry/>
 
 | Network | Index |
 |---|---|
-| Mainnet | <https://arklabshq.github.io/solver-registry/mainnet.json> |
-| Signet | <https://arklabshq.github.io/solver-registry/signet.json> |
-| Mutinynet | <https://arklabshq.github.io/solver-registry/mutinynet.json> |
+| Mainnet | <https://arkade-os.github.io/solver-registry/mainnet.json> |
+| Signet | <https://arkade-os.github.io/solver-registry/signet.json> |
+| Mutinynet | <https://arkade-os.github.io/solver-registry/mutinynet.json> |
 
 Each index is a flat, pre-sorted (best `fee_bps` first) list of markets for
 that network, stamped with `generated_at` and the source `commit`, matching
@@ -57,7 +57,7 @@ registry you follow, merge, filter by pair, price from the market's
 
 ### Client library
 
-[`@arkade/solver-discovery`](packages/discovery-client/) implements the maker
+[`@arkade-os/solver-discovery`](packages/discovery-client/) implements the maker
 flow so you don't have to: a portable, zero-dependency ESM library (browser /
 Node / Expo) that fetches and merges registries, ranks markets, converts amounts
 using each asset's precision, and computes the `wantAmount` — down to a one-call
@@ -75,7 +75,7 @@ index.html                 landing page served at the Pages base URL
 scripts/reduce.ts          the reducer: pnpm reduce
 scripts/canonical.ts       canonical JSON + BIP340 helpers
 tests/                     golden index, rejection cases, sort/determinism
-packages/discovery-client/ @arkade/solver-discovery: the maker-flow client lib
+packages/discovery-client/ @arkade-os/solver-discovery: the maker-flow client lib
 ```
 
 ## Reducer
@@ -102,12 +102,13 @@ which card failed and why without digging through logs.
 
 ## CI
 
-- `validate.yml` runs on every PR: schema/signature checks plus the reducer
-  in `--check` mode, so a broken card can't merge. Configure branch
-  protection on `master` to require this check.
-- `publish.yml` runs on push to `master`: re-validates (never publishes on
-  failure), then builds and deploys `mainnet.json` / `signet.json` /
-  `mutinynet.json` to GitHub Pages.
+- `validate.yml` runs on PRs that change `solvers/**`: schema/signature checks
+  plus the reducer in `--check` mode, so a broken card can't merge. If you make
+  this check required, scope that rule to solver changes; a globally required
+  path-filtered workflow can block package-only PRs because GitHub skips it.
+- `publish.yml` runs on pushes to `master` that change `solvers/**`:
+  re-validates (never publishes on failure), then builds and deploys
+  `mainnet.json` / `signet.json` / `mutinynet.json` to GitHub Pages.
 
 ## Run your own registry
 

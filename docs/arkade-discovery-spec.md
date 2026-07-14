@@ -14,7 +14,7 @@ Trust anchors to each registry repo and its PR review, not to keys. A live-quote
 
 ## Solver card
 
-One file per solver per network, `solvers/<network>/<name>.json` (networks: `mainnet`, `signet`, `mutinynet` — same partitioning as ArkLabsHQ/asset-registry), submitted and updated by PR. The network lives in the path, not the card: asset IDs are network-scoped, so a pair is only meaningful within its directory, and a solver active on several networks files one card per network.
+One file per solver per network, `solvers/<network>/<name>.json` (networks: `mainnet`, `signet`, `mutinynet` — same partitioning as arkade-os/asset-registry), submitted and updated by PR. The network lives in the path, not the card: asset IDs are network-scoped, so a pair is only meaningful within its directory, and a solver active on several networks files one card per network.
 
 ```json
 {

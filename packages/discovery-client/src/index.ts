@@ -1,4 +1,4 @@
-// @arkade/solver-discovery — a portable ESM client for discovering solver price
+// @arkade-os/solver-discovery — a portable ESM client for discovering solver price
 // feeds from Arkade solver registries. Runs in browsers, Node, and Expo /
 // React Native with zero runtime dependencies (global `fetch` only).
 //
