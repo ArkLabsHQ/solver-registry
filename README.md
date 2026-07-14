@@ -110,6 +110,25 @@ which card failed and why without digging through logs.
   re-validates (never publishes on failure), then builds and deploys
   `bitcoin.json` / `signet.json` / `mutinynet.json` to GitHub Pages.
 
+## Release the client package
+
+Publish [`@arkade-os/solver-discovery`](packages/discovery-client/) manually
+from the command line:
+
+```sh
+cd packages/discovery-client
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm test
+pnpm build
+npm publish --access public
+```
+
+Before publishing, update `packages/discovery-client/package.json` to the new
+version and make sure you are logged in to npm with publish rights for the
+`@arkade-os` scope. After publishing, tag the release from the repo root, for
+example `git tag solver-discovery-v0.1.0`.
+
 ## Run your own registry
 
 Fork this repo, replace the cards under `solvers/`, enable GitHub Pages
