@@ -176,17 +176,23 @@ pnpm build       # emits dist/*.js + *.d.ts
 
 ## Release
 
-Publish manually from this package directory:
+From the repo root, publish a patch, minor, or major release:
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm typecheck
-pnpm test
-pnpm build
-npm publish --access public
+npm run release:client -- patch
 ```
 
-Before publishing, update `package.json` to the new version and make sure you
-are logged in to npm with publish rights for the `@arkade-os` scope. After
-publishing, tag the release from the repo root, for example
-`git tag solver-discovery-v0.1.0`.
+The last argument must be `patch`, `minor`, or `major`. The script requires a
+clean git tree, runs the package tests/typecheck/build, bumps
+`packages/discovery-client/package.json` with `npm version <level>
+--no-git-tag-version`, publishes to npm, then creates a release commit and a
+`solver-discovery-vX.Y.Z` tag.
+
+You can also run the same workflow from this package directory:
+
+```sh
+npm run release -- minor
+```
+
+Before running it, make sure you are logged in to npm with publish rights for
+the `@arkade-os` scope.
