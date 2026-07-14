@@ -149,6 +149,14 @@ export function computeWantAmount(input: WantAmountInput): bigint {
   return (deposit * price.den * net) / (price.num * 10000n);
 }
 
+/** Whether a base-side amount sits within a market's inclusive [min, max] size bounds. */
+export function withinBaseLimits(
+  market: Pick<Market, "min_base_amount" | "max_base_amount">,
+  baseAmount: bigint,
+): boolean {
+  return baseAmount >= BigInt(market.min_base_amount) && baseAmount <= BigInt(market.max_base_amount);
+}
+
 /** Render a rational to a fixed-decimal string (for display only, never pricing). */
 export function rationalToDecimalString(r: Rational, decimals = 8): string {
   const neg = r.num < 0n;
@@ -199,8 +207,7 @@ export function quoteMarket(input: QuoteInput): Quote {
   const price = deriveAtomicPrice(input.feedValue, market);
   const wantAmount = computeWantAmount({ deposit, direction, price, feeBps: market.fee_bps, safetyBps });
   const baseAmount = direction === "baseToQuote" ? deposit : wantAmount;
-  const withinLimits =
-    baseAmount >= BigInt(market.min_base_amount) && baseAmount <= BigInt(market.max_base_amount);
+  const withinLimits = withinBaseLimits(market, baseAmount);
   return {
     market,
     direction,

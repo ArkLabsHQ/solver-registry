@@ -36,18 +36,11 @@ export interface FromAtomicOptions {
  * `trim: false`). Negative inputs are supported for completeness.
  */
 export function fromAtomic(atomic: bigint, precision: number, opts: FromAtomicOptions = {}): string {
-  const trim = opts.trim ?? true;
-  const neg = atomic < 0n;
-  const abs = neg ? -atomic : atomic;
-  const scale = pow10(precision);
-  const whole = abs / scale;
-  let out = whole.toString();
-  if (precision > 0) {
-    let frac = (abs % scale).toString().padStart(precision, "0");
-    if (trim) frac = frac.replace(/0+$/, "");
-    if (frac.length > 0) out += "." + frac;
+  let out = rationalToDecimalString({ num: atomic, den: pow10(precision) }, precision);
+  if ((opts.trim ?? true) && out.includes(".")) {
+    out = out.replace(/0+$/, "").replace(/\.$/, "");
   }
-  return (neg ? "-" : "") + out;
+  return out;
 }
 
 /**

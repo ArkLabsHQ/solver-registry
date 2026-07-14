@@ -7,25 +7,13 @@ import {
   bestMarket,
   priceMarket,
 } from "../src/discovery.ts";
-import type { FetchLike } from "../src/feed.ts";
+import { makeMarket, mockFetch, USDT_ID as USDT } from "./helpers.ts";
 
-const USDT = "a".repeat(68);
 const NOW = 1_700_000_100;
 const GENERATED_AT = 1_700_000_000;
 
 function idxMarket(solver: string, fee: number) {
-  return {
-    pair: "BTC/USDT",
-    base_asset: { id: "btc", name: "Bitcoin", ticker: "BTC", precision: 8 },
-    quote_asset: { id: USDT, name: "Tether USD", ticker: "USDT", precision: 6 },
-    price_feed: "https://feed.example.com/btcusdt",
-    price_decimals: 0,
-    invert: false,
-    fee_bps: fee,
-    min_base_amount: 1000,
-    max_base_amount: 5_000_000,
-    solver,
-  };
+  return { ...makeMarket({ fee_bps: fee }), solver };
 }
 
 function index(commit: string, markets: unknown[]) {
@@ -39,18 +27,7 @@ const REG_BAD = "https://reg-bad.example.com/mainnet.json";
 const FEED = "https://feed.example.com/btcusdt";
 
 function daveCard() {
-  const m = idxMarket("dave", 10) as Record<string, unknown>;
-  delete m.solver;
-  return { version: 0, name: "dave", markets: [m] };
-}
-
-function mockFetch(routes: Record<string, { status?: number; body: string }>): FetchLike {
-  return async (url) => {
-    const r = routes[url];
-    if (!r) return { ok: false, status: 404, text: async () => "not found" };
-    const status = r.status ?? 200;
-    return { ok: status >= 200 && status < 300, status, text: async () => r.body };
-  };
+  return { version: 0, name: "dave", markets: [makeMarket({ fee_bps: 10 })] };
 }
 
 const routes = {

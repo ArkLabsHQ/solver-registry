@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { toAtomic, fromAtomic, displayPrice, displayPriceString } from "../src/assets.ts";
 import { planSwap, swap } from "../src/swap.ts";
 import type { Market } from "../src/types.ts";
-import type { FetchLike } from "../src/feed.ts";
+import { makeMarket, mockFetch } from "./helpers.ts";
 
 // --- conversion (Arkade Assets are precision 8) ---
 
@@ -48,17 +48,11 @@ test("displayPrice: equal precision is identity, cross precision scales", () => 
 const DEPIX_ID = "4".repeat(68);
 
 function arkadeMarket(): Market {
-  return {
+  return makeMarket({
     pair: "BTC/DePix",
-    base_asset: { id: "btc", name: "Bitcoin", ticker: "BTC", precision: 8 },
     quote_asset: { id: DEPIX_ID, name: "Decentralized Pix", ticker: "DePix", precision: 8 },
     price_feed: "https://feed.example.com/depix",
-    price_decimals: 0,
-    invert: false,
-    fee_bps: 30,
-    min_base_amount: 1000,
-    max_base_amount: 5_000_000,
-  };
+  });
 }
 
 test("planSwap: give base, receive quote (human amounts, precision 8)", () => {
@@ -114,10 +108,9 @@ test("planSwap: accepts a raw atomic bigint give amount", () => {
 });
 
 test("swap: one call fetches the feed then plans (mock fetch)", async () => {
-  const fetchImpl: FetchLike = async (url) => {
-    assert.equal(url, "https://feed.example.com/depix");
-    return { ok: true, status: 200, text: async () => JSON.stringify({ symbol: "BTCBRL", price: "377000" }) };
-  };
+  const fetchImpl = mockFetch({
+    "https://feed.example.com/depix": { body: JSON.stringify({ symbol: "BTCBRL", price: "377000" }) },
+  });
   const plan = await swap(arkadeMarket(), { give: "base", giveAmount: "0.01", safetyBps: 50, fetchImpl });
   assert.equal(plan.receive.display, "3739.84");
   assert.equal(plan.receive.atomic, 373_984_000_000n);

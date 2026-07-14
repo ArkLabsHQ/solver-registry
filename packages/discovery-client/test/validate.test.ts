@@ -1,28 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { validateCard, validateIndex } from "../src/validate.ts";
-
-const ASSET_QUOTE = { id: "a".repeat(68), name: "Tether USD", ticker: "USDT", precision: 6 };
-const ASSET_BASE = { id: "btc", name: "Bitcoin", ticker: "BTC", precision: 8 };
+import { makeMarket } from "./helpers.ts";
 
 function validCard(): any {
-  return {
-    version: 0,
-    name: "alice",
-    markets: [
-      {
-        pair: "BTC/USDT",
-        base_asset: { ...ASSET_BASE },
-        quote_asset: { ...ASSET_QUOTE },
-        price_feed: "https://feed.example.com/btcusdt",
-        price_decimals: 8,
-        invert: false,
-        fee_bps: 30,
-        min_base_amount: 1000,
-        max_base_amount: 5_000_000,
-      },
-    ],
-  };
+  return { version: 0, name: "alice", markets: [makeMarket()] };
 }
 
 function validIndex(): any {
@@ -53,6 +35,11 @@ const CARD_REJECTIONS: Array<{ name: string; mutate: (c: any) => void; expect: R
   { name: "bad version", mutate: (c) => (c.version = 1), expect: /version/ },
   { name: "bad name pattern", mutate: (c) => (c.name = "Alice"), expect: /name/ },
   { name: "additional property", mutate: (c) => (c.extra = true), expect: /not an allowed property/ },
+  {
+    name: "asset additional property",
+    mutate: (c) => (c.markets[0].base_asset.extra = true),
+    expect: /base_asset\/extra is not an allowed property/,
+  },
   { name: "min > max", mutate: (c) => (c.markets[0].min_base_amount = 9_000_000), expect: /min_base_amount/ },
   {
     name: "pair/ticker mismatch",

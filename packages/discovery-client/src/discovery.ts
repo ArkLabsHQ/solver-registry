@@ -6,7 +6,7 @@
 
 import type { IndexMarket, Network, NetworkIndex } from "./types.ts";
 import { validateCard, validateIndex } from "./validate.ts";
-import { quoteMarket, type Direction, type Quote } from "./pricing.ts";
+import { quoteMarket, withinBaseLimits, type Direction, type Quote } from "./pricing.ts";
 import { fetchText, fetchFeedValue, type FetchLike, type FetchFeedOptions } from "./feed.ts";
 
 export type SourceType = "registry" | "local";
@@ -17,7 +17,20 @@ export interface DiscoveredMarket extends IndexMarket {
   sourceType: SourceType;
 }
 
-const DEFAULT_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+export const DEFAULT_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+
+/**
+ * Whether an index is older than `maxAgeSeconds` (default 7 days) relative to
+ * `now` (unix seconds, default wall clock). Pure — usable on a cached index
+ * without refetching.
+ */
+export function isIndexStale(
+  index: Pick<NetworkIndex, "generated_at">,
+  opts: { now?: number; maxAgeSeconds?: number } = {},
+): boolean {
+  const now = opts.now ?? Math.floor(Date.now() / 1000);
+  return now - index.generated_at > (opts.maxAgeSeconds ?? DEFAULT_MAX_AGE_SECONDS);
+}
 
 export interface FetchIndexOptions {
   /** Expected network; a mismatched index is rejected. */
@@ -71,8 +84,7 @@ export async function fetchIndex(
 
   const index = result.value!;
   const now = opts.now ?? Math.floor(Date.now() / 1000);
-  const maxAge = opts.maxAgeSeconds ?? DEFAULT_MAX_AGE_SECONDS;
-  if (now - index.generated_at > maxAge) {
+  if (isIndexStale(index, { now, maxAgeSeconds: opts.maxAgeSeconds })) {
     const ageDays = Math.floor((now - index.generated_at) / 86400);
     warnings.push(`index is stale: generated ${ageDays} day(s) ago`);
   }
@@ -88,17 +100,12 @@ export interface LocalCardInput {
   label?: string;
 }
 
-export interface DiscoverOptions {
+export interface DiscoverOptions extends FetchIndexOptions {
   /** Registry URLs to follow, in priority order (used as the ranking tiebreak). */
-  registries?: Array<string | { url: string }>;
+  registries?: string[];
   /** Locally pinned solver cards, validated against the card schema. */
   localCards?: LocalCardInput[];
   network: Network;
-  fetchImpl?: FetchLike;
-  signal?: AbortSignal;
-  timeoutMs?: number;
-  now?: number;
-  maxAgeSeconds?: number;
 }
 
 export interface SourceReport {
@@ -151,40 +158,30 @@ function recordSource(sources: SourceReport[], warnings: string[], report: Sourc
  * `fee_bps`, with source order as the tiebreak.
  */
 export async function discover(opts: DiscoverOptions): Promise<DiscoverResult> {
-  const registries = (opts.registries ?? []).map((r) => (typeof r === "string" ? r : r.url));
   const sources: SourceReport[] = [];
   const warnings: string[] = [];
-
-  // Tag each entry with the index of its source so ties rank by follow order.
-  const tagged: Array<{ market: IndexMarket; source: string; sourceType: SourceType; order: number }> = [];
-  let order = 0;
+  // Entries accumulate in source order (registries first, then local cards);
+  // the stable sort below preserves that order within equal (pair, fee) keys,
+  // which realizes the spec's "source order as tiebreak" without bookkeeping.
+  const tagged: Array<{ market: IndexMarket; source: string; sourceType: SourceType }> = [];
+  let contributing = 0;
 
   const indexResults = await Promise.all(
-    registries.map((url) =>
-      fetchIndex(url, {
-        network: opts.network,
-        fetchImpl: opts.fetchImpl,
-        signal: opts.signal,
-        timeoutMs: opts.timeoutMs,
-        now: opts.now,
-        maxAgeSeconds: opts.maxAgeSeconds,
-      }),
-    ),
+    (opts.registries ?? []).map((url) => fetchIndex(url, opts)),
   );
 
   for (const r of indexResults) {
-    const currentOrder = order++;
     if (!r.ok) {
       recordSource(sources, warnings, { source: r.url, sourceType: "registry", ok: false, marketCount: 0, error: r.error, warnings: r.warnings });
       continue;
     }
     const markets = r.index!.markets;
-    for (const m of markets) tagged.push({ market: m, source: r.url, sourceType: "registry", order: currentOrder });
+    if (markets.length > 0) contributing++;
+    for (const m of markets) tagged.push({ market: m, source: r.url, sourceType: "registry" });
     recordSource(sources, warnings, { source: r.url, sourceType: "registry", ok: true, marketCount: markets.length, warnings: r.warnings });
   }
 
   for (const local of opts.localCards ?? []) {
-    const currentOrder = order++;
     const result = validateCard(local.card);
     if (!result.ok) {
       const source = local.label ?? "local:<invalid>";
@@ -199,31 +196,35 @@ export async function discover(opts: DiscoverOptions): Promise<DiscoverResult> {
       recordSource(sources, warnings, { source, sourceType: "local", ok: false, marketCount: 0, error, warnings: [] });
       continue;
     }
+    if (card.markets.length > 0) contributing++;
     for (const m of card.markets) {
       const entry: IndexMarket = { ...m, solver: card.name };
       if (card.discovery_pubkey) entry.discovery_pubkey = card.discovery_pubkey;
-      tagged.push({ market: entry, source, sourceType: "local", order: currentOrder });
+      tagged.push({ market: entry, source, sourceType: "local" });
     }
     recordSource(sources, warnings, { source, sourceType: "local", ok: true, marketCount: card.markets.length, warnings: [] });
   }
 
   // Drop byte-identical duplicates (same solver listed in two registries),
-  // keeping the earliest source.
-  const seen = new Set<string>();
-  const deduped = tagged.filter((t) => {
-    const key = stableStringify(t.market);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  // keeping the earliest source. Per the spec, entries within one source are
+  // distinct by definition, so with a single contributing source there is
+  // nothing to dedupe and the canonical-key pass is skipped entirely.
+  let deduped = tagged;
+  if (contributing > 1) {
+    const seen = new Set<string>();
+    deduped = tagged.filter((t) => {
+      const key = stableStringify(t.market);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
 
   // Precompute each entry's sort key once rather than rebuilding it on every comparison.
   const withKey = deduped.map((t) => ({ t, key: idPair(t.market) }));
   withKey.sort((a, b) => {
     if (a.key !== b.key) return a.key < b.key ? -1 : 1;
-    if (a.t.market.fee_bps !== b.t.market.fee_bps) return a.t.market.fee_bps - b.t.market.fee_bps;
-    if (a.t.order !== b.t.order) return a.t.order - b.t.order;
-    return a.t.market.solver < b.t.market.solver ? -1 : a.t.market.solver > b.t.market.solver ? 1 : 0;
+    return a.t.market.fee_bps - b.t.market.fee_bps;
   });
 
   const markets: DiscoveredMarket[] = withKey.map(({ t }) => ({ ...t.market, source: t.source, sourceType: t.sourceType }));
@@ -242,10 +243,12 @@ export interface SelectOptions {
   baseAmount?: bigint | number;
 }
 
-function matchesSelection(m: IndexMarket, opts: SelectOptions, amount: bigint | undefined): boolean {
-  if (m.base_asset.id !== opts.baseId || m.quote_asset.id !== opts.quoteId) return false;
-  if (amount === undefined) return true;
-  return amount >= BigInt(m.min_base_amount) && amount <= BigInt(m.max_base_amount);
+function selectionPredicate(opts: SelectOptions): (m: IndexMarket) => boolean {
+  const amount = opts.baseAmount === undefined ? undefined : BigInt(opts.baseAmount);
+  return (m) => {
+    if (m.base_asset.id !== opts.baseId || m.quote_asset.id !== opts.quoteId) return false;
+    return amount === undefined || withinBaseLimits(m, amount);
+  };
 }
 
 /**
@@ -254,14 +257,12 @@ function matchesSelection(m: IndexMarket, opts: SelectOptions, amount: bigint | 
  * execution. Pricing still comes from the feed; this ranking is a static proxy.
  */
 export function selectMarkets<T extends IndexMarket>(markets: T[], opts: SelectOptions): T[] {
-  const amount = opts.baseAmount === undefined ? undefined : BigInt(opts.baseAmount);
-  return markets.filter((m) => matchesSelection(m, opts, amount));
+  return markets.filter(selectionPredicate(opts));
 }
 
 /** The best market for an id pair, or null if none match. Short-circuits on the first match. */
 export function bestMarket<T extends IndexMarket>(markets: T[], opts: SelectOptions): T | null {
-  const amount = opts.baseAmount === undefined ? undefined : BigInt(opts.baseAmount);
-  return markets.find((m) => matchesSelection(m, opts, amount)) ?? null;
+  return markets.find(selectionPredicate(opts)) ?? null;
 }
 
 export interface PriceMarketOptions extends FetchFeedOptions {

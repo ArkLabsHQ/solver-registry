@@ -7,25 +7,7 @@ import {
   rationalToDecimalString,
   quoteMarket,
 } from "../src/pricing.ts";
-import type { Market } from "../src/types.ts";
-
-const btc = { id: "btc", name: "Bitcoin", ticker: "BTC", precision: 8 };
-const usdt = { id: "a".repeat(68), name: "Tether USD", ticker: "USDT", precision: 6 };
-
-function market(overrides: Partial<Market> = {}): Market {
-  return {
-    pair: "BTC/USDT",
-    base_asset: btc,
-    quote_asset: usdt,
-    price_feed: "https://feed.example.com/btcusdt",
-    price_decimals: 0,
-    invert: false,
-    fee_bps: 30,
-    min_base_amount: 1000,
-    max_base_amount: 5_000_000,
-    ...overrides,
-  };
-}
+import { makeMarket as market } from "./helpers.ts";
 
 test("parseDecimal: integers, fixed-point, scientific, signs, and numbers", () => {
   assert.deepEqual(parseDecimal("377000.00000000"), { num: 377000n, den: 1n });

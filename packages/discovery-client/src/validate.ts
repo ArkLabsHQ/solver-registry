@@ -6,7 +6,7 @@
 // mirror `schema/card.schema.json` / `schema/index.schema.json` and the extra
 // cross-field rules the reducer enforces, with no `eval` and no dependencies.
 
-import type { AssetInfo, Card, IndexMarket, NetworkIndex } from "./types.ts";
+import type { AssetInfo, Card, NetworkIndex } from "./types.ts";
 import { isNetwork } from "./types.ts";
 
 export interface ValidationResult<T> {
@@ -31,50 +31,49 @@ function isInt(v: unknown): v is number {
   return typeof v === "number" && Number.isInteger(v);
 }
 
-/** Collects path-tagged error messages for one validation pass. */
-class Errors {
-  readonly list: string[] = [];
-  add(path: string, message: string): void {
-    this.list.push(`${path} ${message}`);
-  }
+// Errors accumulate as path-tagged strings in a plain array; these helpers
+// cover the repeated field-check shapes so each rule lives in one place.
+
+function add(errors: string[], path: string, message: string): void {
+  errors.push(`${path} ${message}`);
 }
 
-function checkIntRange(err: Errors, path: string, v: unknown, min: number, max: number): void {
-  if (!isInt(v) || v < min || v > max) {
-    err.add(path, `must be an integer in ${min}..${max}`);
-  }
+function checkPattern(errors: string[], path: string, v: unknown, re: RegExp, message: string): void {
+  if (typeof v !== "string" || !re.test(v)) add(errors, path, message);
 }
 
-function checkIntMin(err: Errors, path: string, v: unknown, min: number): void {
-  if (!isInt(v) || v < min) {
-    err.add(path, `must be an integer >= ${min}`);
-  }
+function checkIntRange(errors: string[], path: string, v: unknown, min: number, max: number): void {
+  if (!isInt(v) || v < min || v > max) add(errors, path, `must be an integer in ${min}..${max}`);
 }
 
-function checkStringLength(err: Errors, path: string, v: unknown, min: number, max: number): void {
+function checkIntMin(errors: string[], path: string, v: unknown, min: number): void {
+  if (!isInt(v) || v < min) add(errors, path, `must be an integer >= ${min}`);
+}
+
+function checkStringLength(errors: string[], path: string, v: unknown, min: number, max: number): void {
   if (typeof v !== "string" || v.length < min || v.length > max) {
-    err.add(path, `must be a string of length ${min}..${max}`);
+    add(errors, path, `must be a string of length ${min}..${max}`);
+  }
+}
+
+function checkAllowedKeys(errors: string[], path: string, obj: Record<string, unknown>, allowed: Set<string>): void {
+  for (const key of Object.keys(obj)) {
+    if (!allowed.has(key)) add(errors, `${path}/${key}`, "is not an allowed property");
   }
 }
 
 const ASSET_KEYS = new Set(["id", "name", "ticker", "precision"]);
 
-function checkAsset(err: Errors, path: string, v: unknown, strict: boolean): void {
+function checkAsset(errors: string[], path: string, v: unknown, strict: boolean): void {
   if (!isObject(v)) {
-    err.add(path, "must be an object");
+    add(errors, path, "must be an object");
     return;
   }
-  if (strict) {
-    for (const key of Object.keys(v)) {
-      if (!ASSET_KEYS.has(key)) err.add(`${path}/${key}`, "is not an allowed property");
-    }
-  }
-  if (typeof v.id !== "string" || !ASSET_ID.test(v.id)) {
-    err.add(`${path}/id`, 'must be "btc" or 68 lowercase hex chars');
-  }
-  checkStringLength(err, `${path}/name`, v.name, 1, 64);
-  checkStringLength(err, `${path}/ticker`, v.ticker, 1, 16);
-  checkIntRange(err, `${path}/precision`, v.precision, 0, 18);
+  if (strict) checkAllowedKeys(errors, path, v, ASSET_KEYS);
+  checkPattern(errors, `${path}/id`, v.id, ASSET_ID, 'must be "btc" or 68 lowercase hex chars');
+  checkStringLength(errors, `${path}/name`, v.name, 1, 64);
+  checkStringLength(errors, `${path}/ticker`, v.ticker, 1, 16);
+  checkIntRange(errors, `${path}/precision`, v.precision, 0, 18);
 }
 
 const MARKET_KEYS = new Set([
@@ -94,22 +93,16 @@ const MARKET_KEYS = new Set([
  * are rejected only when `strict` is set (cards); index consumers stay
  * forward-compatible with new fields the reducer might add.
  */
-function checkMarket(err: Errors, path: string, v: unknown, opts: { strict: boolean }): void {
+function checkMarket(errors: string[], path: string, v: unknown, strict: boolean): void {
   if (!isObject(v)) {
-    err.add(path, "must be an object");
+    add(errors, path, "must be an object");
     return;
   }
-  if (opts.strict) {
-    for (const key of Object.keys(v)) {
-      if (!MARKET_KEYS.has(key)) err.add(`${path}/${key}`, "is not an allowed property");
-    }
-  }
+  if (strict) checkAllowedKeys(errors, path, v, MARKET_KEYS);
 
-  if (typeof v.pair !== "string" || !PAIR.test(v.pair)) {
-    err.add(`${path}/pair`, 'must match "<base>/<quote>"');
-  }
-  checkAsset(err, `${path}/base_asset`, v.base_asset, opts.strict);
-  checkAsset(err, `${path}/quote_asset`, v.quote_asset, opts.strict);
+  checkPattern(errors, `${path}/pair`, v.pair, PAIR, 'must match "<base>/<quote>"');
+  checkAsset(errors, `${path}/base_asset`, v.base_asset, strict);
+  checkAsset(errors, `${path}/quote_asset`, v.quote_asset, strict);
 
   // pair label must equal the two tickers (identity still lives in the ids).
   const base = v.base_asset as AssetInfo | undefined;
@@ -117,26 +110,36 @@ function checkMarket(err: Errors, path: string, v: unknown, opts: { strict: bool
   if (typeof v.pair === "string" && base?.ticker && quote?.ticker) {
     const expected = `${base.ticker}/${quote.ticker}`;
     if (v.pair !== expected) {
-      err.add(`${path}/pair`, `"${v.pair}" does not match asset tickers "${expected}"`);
+      add(errors, `${path}/pair`, `"${v.pair}" does not match asset tickers "${expected}"`);
     }
   }
 
   if (typeof v.price_feed !== "string" || !v.price_feed.startsWith("https://")) {
-    err.add(`${path}/price_feed`, "must be an https:// URL");
+    add(errors, `${path}/price_feed`, "must be an https:// URL");
   }
-  checkIntRange(err, `${path}/price_decimals`, v.price_decimals, 0, 18);
+  checkIntRange(errors, `${path}/price_decimals`, v.price_decimals, 0, 18);
   if (typeof v.invert !== "boolean") {
-    err.add(`${path}/invert`, "must be a boolean");
+    add(errors, `${path}/invert`, "must be a boolean");
   }
-  checkIntRange(err, `${path}/fee_bps`, v.fee_bps, 0, 10000);
-  checkIntMin(err, `${path}/min_base_amount`, v.min_base_amount, 1);
-  checkIntMin(err, `${path}/max_base_amount`, v.max_base_amount, 1);
+  checkIntRange(errors, `${path}/fee_bps`, v.fee_bps, 0, 10000);
+  checkIntMin(errors, `${path}/min_base_amount`, v.min_base_amount, 1);
+  checkIntMin(errors, `${path}/max_base_amount`, v.max_base_amount, 1);
   if (
     isInt(v.min_base_amount) &&
     isInt(v.max_base_amount) &&
     v.min_base_amount > v.max_base_amount
   ) {
-    err.add(path, `min_base_amount (${v.min_base_amount}) > max_base_amount (${v.max_base_amount})`);
+    add(errors, path, `min_base_amount (${v.min_base_amount}) > max_base_amount (${v.max_base_amount})`);
+  }
+}
+
+/** An index entry is a market plus reducer-added provenance (`solver`, optional pubkey). */
+function checkIndexMarket(errors: string[], path: string, v: unknown): void {
+  checkMarket(errors, path, v, false);
+  if (!isObject(v)) return;
+  checkPattern(errors, `${path}/solver`, v.solver, NAME, 'must match "^[a-z0-9-]+$"');
+  if (v.discovery_pubkey !== undefined) {
+    checkPattern(errors, `${path}/discovery_pubkey`, v.discovery_pubkey, PUBKEY, "must be 64 lowercase hex chars");
   }
 }
 
@@ -147,39 +150,31 @@ const CARD_KEYS = new Set(["version", "name", "discovery_pubkey", "sig", "market
  * `schema/card.schema.json` including rejection of unknown properties.
  */
 export function validateCard(input: unknown): ValidationResult<Card> {
-  const err = new Errors();
   if (!isObject(input)) {
     return { ok: false, errors: ["/ must be an object"] };
   }
-  for (const key of Object.keys(input)) {
-    if (!CARD_KEYS.has(key)) err.add(`/${key}`, "is not an allowed property");
-  }
-  if (input.version !== 0) err.add("/version", "must be 0");
-  if (typeof input.name !== "string" || !NAME.test(input.name)) {
-    err.add("/name", 'must match "^[a-z0-9-]+$"');
-  }
+  const errors: string[] = [];
+  checkAllowedKeys(errors, "", input, CARD_KEYS);
+  if (input.version !== 0) add(errors, "/version", "must be 0");
+  checkPattern(errors, "/name", input.name, NAME, 'must match "^[a-z0-9-]+$"');
   if (input.discovery_pubkey !== undefined) {
-    if (typeof input.discovery_pubkey !== "string" || !PUBKEY.test(input.discovery_pubkey)) {
-      err.add("/discovery_pubkey", "must be 64 lowercase hex chars");
-    }
+    checkPattern(errors, "/discovery_pubkey", input.discovery_pubkey, PUBKEY, "must be 64 lowercase hex chars");
   }
   if (input.sig !== undefined) {
-    if (typeof input.sig !== "string" || !SIG.test(input.sig)) {
-      err.add("/sig", "must be 128 lowercase hex chars");
-    }
+    checkPattern(errors, "/sig", input.sig, SIG, "must be 128 lowercase hex chars");
     if (input.discovery_pubkey === undefined) {
-      err.add("/", "sig requires discovery_pubkey");
+      add(errors, "/", "sig requires discovery_pubkey");
     }
   }
   if (!Array.isArray(input.markets) || input.markets.length < 1) {
-    err.add("/markets", "must be a non-empty array");
+    add(errors, "/markets", "must be a non-empty array");
   } else {
-    input.markets.forEach((m, i) => checkMarket(err, `/markets/${i}`, m, { strict: true }));
+    input.markets.forEach((m, i) => checkMarket(errors, `/markets/${i}`, m, true));
   }
 
-  return err.list.length === 0
+  return errors.length === 0
     ? { ok: true, errors: [], value: input as unknown as Card }
-    : { ok: false, errors: err.list };
+    : { ok: false, errors };
 }
 
 /**
@@ -191,42 +186,27 @@ export function validateIndex(
   input: unknown,
   expectedNetwork?: string,
 ): ValidationResult<NetworkIndex> {
-  const err = new Errors();
   if (!isObject(input)) {
     return { ok: false, errors: ["/ must be an object"] };
   }
-  if (input.version !== 0) err.add("/version", "must be 0 (unknown index version)");
+  const errors: string[] = [];
+  if (input.version !== 0) add(errors, "/version", "must be 0 (unknown index version)");
   if (!isNetwork(input.network)) {
-    err.add("/network", "must be one of mainnet, signet, mutinynet");
+    add(errors, "/network", "must be one of mainnet, signet, mutinynet");
   } else if (expectedNetwork !== undefined && input.network !== expectedNetwork) {
-    err.add("/network", `is "${input.network}" but expected "${expectedNetwork}"`);
+    add(errors, "/network", `is "${input.network}" but expected "${expectedNetwork}"`);
   }
   if (!isInt(input.generated_at) || input.generated_at < 0) {
-    err.add("/generated_at", "must be a non-negative integer (unix seconds)");
+    add(errors, "/generated_at", "must be a non-negative integer (unix seconds)");
   }
-  if (typeof input.commit !== "string" || !COMMIT.test(input.commit)) {
-    err.add("/commit", "must be a 40-char hex commit sha");
-  }
+  checkPattern(errors, "/commit", input.commit, COMMIT, "must be a 40-char hex commit sha");
   if (!Array.isArray(input.markets)) {
-    err.add("/markets", "must be an array");
+    add(errors, "/markets", "must be an array");
   } else {
-    input.markets.forEach((m, i) => {
-      checkMarket(err, `/markets/${i}`, m, { strict: false });
-      if (isObject(m)) {
-        if (typeof m.solver !== "string" || !NAME.test(m.solver)) {
-          err.add(`/markets/${i}/solver`, 'must match "^[a-z0-9-]+$"');
-        }
-        if (
-          m.discovery_pubkey !== undefined &&
-          (typeof m.discovery_pubkey !== "string" || !PUBKEY.test(m.discovery_pubkey))
-        ) {
-          err.add(`/markets/${i}/discovery_pubkey`, "must be 64 lowercase hex chars");
-        }
-      }
-    });
+    input.markets.forEach((m, i) => checkIndexMarket(errors, `/markets/${i}`, m));
   }
 
-  return err.list.length === 0
+  return errors.length === 0
     ? { ok: true, errors: [], value: input as unknown as NetworkIndex }
-    : { ok: false, errors: err.list };
+    : { ok: false, errors };
 }
