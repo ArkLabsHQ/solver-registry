@@ -71,7 +71,7 @@ const REJECTION_CASES: Array<{ case: string; expect: string }> = [
   { case: "min-gt-max", expect: "min_base_amount" },
   { case: "quote-min-gt-max", expect: "min_quote_amount" },
   { case: "unpaired-limits", expect: "must have required property" },
-  { case: "no-limits", expect: "must match a schema in anyOf" },
+  { case: "no-limits", expect: "must enable size limits for at least one side" },
   { case: "non-positive-amount", expect: "min_base_amount must be >= 1 when max_base_amount > 0" },
   { case: "sig-without-pubkey", expect: "must have property" },
   { case: "tampered-sig", expect: "sig does not verify" },

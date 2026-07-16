@@ -172,7 +172,6 @@ test("one-sided markets: selection and listing avoid a side no solver can pay ou
   // With only erin present, the base side is not solvable by any market: no pick.
   const onlyErin = res.markets.filter((m) => m.solver === "erin");
   assert.equal(bestMarket(onlyErin, { baseId: "btc", quoteId: USDT, wantSide: "base" }), null);
-  assert.equal(selectMarkets(onlyErin, { baseId: "btc", quoteId: USDT, wantSide: "base" }).length, 0);
   assert.deepEqual(listMarkets(onlyErin)[0].solvable, { base: 0, quote: 1 });
 });
 

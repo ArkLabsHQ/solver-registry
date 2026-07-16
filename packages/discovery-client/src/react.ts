@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { fetchFeedValue, type FetchFeedOptions } from "./feed.ts";
-import { planOffer, type OfferPlan, type OfferSide } from "./offer.ts";
+import { planOffer, type OfferPlan } from "./offer.ts";
 import { otherSide, sideLimits } from "./pricing.ts";
-import type { Market } from "./types.ts";
+import type { Market, Side } from "./types.ts";
 
 type InitialAmount = string | number | bigint;
 
@@ -16,13 +16,13 @@ export type OfferQuoteStatus = "idle" | "loading" | "success" | "error";
 
 export type UseOfferQuoteOptions = FetchFeedOptions & {
   /** Which side the maker deposits. Defaults to `base`. */
-  give?: OfferSide;
+  give?: Side;
   safetyBps?: number;
 } & InitialAmountOptions;
 
 export interface UseOfferQuoteResult {
   market: Market | null;
-  give: OfferSide;
+  give: Side;
   /**
    * Whether the market can pay out the side the maker receives (the opposite of
    * `give`): that side's max bound is > 0. `null` while no market is selected.
@@ -123,12 +123,10 @@ export function useOfferQuote(
     if (!market || !solvable) {
       // No market, or the market cannot pay out the side the maker receives:
       // no feed fetch, no plan — `solvable` tells the UI which case it is.
-      // Clear the computed counterpart so a switch to an unsolvable market
-      // doesn't leave the previous market's mirrored amount on screen.
-      if (market) {
-        if (activeInput === "give") setWantAmountValue("");
-        else setGiveAmountValue("");
-      }
+      // Clear the computed counterpart so the previous market's mirrored
+      // amount doesn't linger on screen.
+      if (activeInput === "give") setWantAmountValue("");
+      else setGiveAmountValue("");
       setFeedValue(null);
       setPlan(null);
       setStatus("idle");

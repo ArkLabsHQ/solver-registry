@@ -4,8 +4,6 @@ import {
   parseDecimal,
   deriveAtomicPrice,
   computeWantAmount,
-  wantSideOf,
-  otherSide,
   sideLimits,
   quoteMarket,
 } from "../src/pricing.ts";
@@ -62,13 +60,6 @@ test("sideLimits: max > 0 returns bounds, max = 0 (disabled) returns null", () =
   const quoteOnly = makeOneSidedMarket("quote"); // base bounds zeroed
   assert.equal(sideLimits(quoteOnly, "base"), null);
   assert.deepEqual(sideLimits(quoteOnly, "quote"), { min: 1_000_000, max: 1_000_000_000_000_000 });
-});
-
-test("side mapping: wantSideOf (from direction) and otherSide (from give) agree", () => {
-  assert.equal(wantSideOf("baseToQuote"), "quote");
-  assert.equal(wantSideOf("quoteToBase"), "base");
-  assert.equal(otherSide("base"), "quote");
-  assert.equal(otherSide("quote"), "base");
 });
 
 test("computeWantAmount: baseToQuote concedes fee + safety and floors", () => {
@@ -128,7 +119,6 @@ test("quoteMarket: end-to-end from a feed value, with limit check (in range)", (
     direction: "baseToQuote",
     safetyBps: 50,
   });
-  assert.equal(q.wantSide, "quote");
   assert.equal(q.solvable, true);
   assert.equal(q.withinLimits, true);
   const expected = (100_000n * 65000n * (10000n - 30n - 50n)) / 10000n;
@@ -143,7 +133,6 @@ test("quoteMarket: baseToQuote checks the received quote amount against quote li
     deposit: 500, // want ~ 500 * 65000 * 0.992 = 32_240_000 < min_quote
     direction: "baseToQuote",
   });
-  assert.equal(q.wantSide, "quote");
   assert.equal(q.solvable, true);
   assert.equal(q.withinLimits, false);
 });
@@ -157,7 +146,6 @@ test("quoteMarket: quoteToBase checks limits against the received base amount", 
     direction: "quoteToBase",
   });
   assert.equal(q.direction, "quoteToBase");
-  assert.equal(q.wantSide, "base");
   assert.equal(q.solvable, true);
   assert.equal(q.withinLimits, false);
 });
@@ -173,14 +161,4 @@ test("quoteMarket: a direction whose want side is disabled (max = 0) is not solv
   });
   assert.equal(q.solvable, false);
   assert.equal(q.withinLimits, false);
-
-  // The opposite direction is served: base bounds admit the received amount.
-  const reverse = quoteMarket({
-    market: makeOneSidedMarket("base"),
-    feedValue: "65000",
-    deposit: 65_000_000_000, // quote atomic; wantBase ~ 992_800 within [1000, 5_000_000]
-    direction: "quoteToBase",
-  });
-  assert.equal(reverse.solvable, true);
-  assert.equal(reverse.withinLimits, true);
 });

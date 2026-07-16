@@ -139,6 +139,26 @@ export function marketLimitErrors(market: { [key in LimitKey]?: unknown }): stri
 }
 
 /**
+ * The pair-label rule, shared with the reducer: `pair` must equal
+ * "<base-ticker>/<quote-ticker>". Returns the error message, or null when it
+ * matches — or when the fields are too malformed to compare, which the schema
+ * layer reports instead.
+ */
+export function marketPairError(market: {
+  pair?: unknown;
+  base_asset?: unknown;
+  quote_asset?: unknown;
+}): string | null {
+  const base = (market.base_asset as AssetInfo | undefined)?.ticker;
+  const quote = (market.quote_asset as AssetInfo | undefined)?.ticker;
+  if (typeof market.pair !== "string" || typeof base !== "string" || typeof quote !== "string") {
+    return null;
+  }
+  const expected = `${base}/${quote}`;
+  return market.pair === expected ? null : `pair "${market.pair}" does not match asset tickers "${expected}"`;
+}
+
+/**
  * Validate the market fields common to cards and index entries. Unknown keys
  * are rejected only when `strict` is set (cards); index consumers stay
  * forward-compatible with new fields the reducer might add.
@@ -155,14 +175,8 @@ function checkMarket(errors: string[], path: string, v: unknown, strict: boolean
   checkAsset(errors, `${path}/quote_asset`, v.quote_asset, strict);
 
   // pair label must equal the two tickers (identity still lives in the ids).
-  const base = v.base_asset as AssetInfo | undefined;
-  const quote = v.quote_asset as AssetInfo | undefined;
-  if (typeof v.pair === "string" && base?.ticker && quote?.ticker) {
-    const expected = `${base.ticker}/${quote.ticker}`;
-    if (v.pair !== expected) {
-      add(errors, `${path}/pair`, `"${v.pair}" does not match asset tickers "${expected}"`);
-    }
-  }
+  const pairError = marketPairError(v);
+  if (pairError) add(errors, path, pairError);
 
   if (typeof v.price_feed !== "string" || !v.price_feed.startsWith("https://")) {
     add(errors, `${path}/price_feed`, "must be an https:// URL");

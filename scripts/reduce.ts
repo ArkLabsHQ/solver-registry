@@ -9,60 +9,20 @@ import Ajv from "ajv";
 import addFormats from "ajv-formats";
 import cardSchema from "../schema/card.schema.json" with { type: "json" };
 import { verifyCardSig } from "./canonical.ts";
-import { marketLimitErrors } from "../packages/discovery-client/src/validate.ts";
+import { marketLimitErrors, marketPairError } from "../packages/discovery-client/src/validate.ts";
+// The wire types live with the portable client; the reducer imports them so a
+// schema change is a one-place edit. (The client never imports from scripts/ —
+// this direction keeps it dependency-free.)
+import {
+  NETWORKS,
+  type Card,
+  type IndexMarket,
+  type Network,
+  type NetworkIndex,
+} from "../packages/discovery-client/src/types.ts";
 
-export const NETWORKS = ["bitcoin", "signet", "mutinynet"] as const;
-export type Network = (typeof NETWORKS)[number];
-
-export interface AssetInfo {
-  id: string;
-  name: string;
-  ticker: string;
-  precision: number;
-}
-
-export interface PriceFeedSchema {
-  type: "json";
-  price_path: string;
-}
-
-export interface Market {
-  pair: string;
-  base_asset: AssetInfo;
-  quote_asset: AssetInfo;
-  price_feed: string;
-  price_feed_schema: PriceFeedSchema;
-  price_decimals: number;
-  fee_bps: number;
-  // Per-side size bounds, always present. max = 0 disables the side (the
-  // solver does not pay it out; min must then be 0 too); an enabled side has
-  // 1 <= min <= max, and at least one side is enabled.
-  min_base_amount: number;
-  max_base_amount: number;
-  min_quote_amount: number;
-  max_quote_amount: number;
-}
-
-export interface Card {
-  version: 0;
-  name: string;
-  discovery_pubkey?: string;
-  sig?: string;
-  markets: Market[];
-}
-
-export interface IndexMarket extends Market {
-  solver: string;
-  discovery_pubkey?: string;
-}
-
-export interface NetworkIndex {
-  version: 0;
-  network: Network;
-  generated_at: number;
-  commit: string;
-  markets: IndexMarket[];
-}
+export { NETWORKS, type Network };
+export type { Card, IndexMarket, NetworkIndex };
 
 export interface CardError {
   file: string;
@@ -125,16 +85,10 @@ export function reduceNetwork(
         );
       }
       for (const [i, market] of card.markets.entries()) {
-        // Cross-field limit rules shared with the client validator, so CI and
+        // Cross-field rules shared with the client validator, so CI and
         // clients reject the same cards with the same messages.
-        for (const message of marketLimitErrors(market)) {
-          messages.push(`markets[${i}]: ${message}`);
-        }
-        const expectedPair = `${market.base_asset.ticker}/${market.quote_asset.ticker}`;
-        if (market.pair !== expectedPair) {
-          messages.push(
-            `markets[${i}]: pair "${market.pair}" does not match asset tickers "${expectedPair}"`,
-          );
+        for (const message of [...marketLimitErrors(market), marketPairError(market)]) {
+          if (message) messages.push(`markets[${i}]: ${message}`);
         }
       }
       if (card.sig) {

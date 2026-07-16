@@ -178,8 +178,6 @@ content: {
 }
 ```
 
-Size bounds follow the card's per-side rules: all four fields present, `max = 0` disables a side, an enabled side has `1 <= min <= max`, and an enabled side is one the solver pays out.
-
 `price` is a decimal string in quote-units-per-base-unit, already normalized and net of nothing — the maker still concedes `fee_bps` from it. The commitment: an offer funded before `expiration`, within limits, priced at or inside `price` less `fee_bps`, will be filled. How the solver's internal fill-time check accommodates its own quote is its problem, not the protocol's. Kind 38173 is deliberately distinct from NIP-69's 38383 (orders): these are quotes. Activation makes the card's `discovery_pubkey` and `sig` required and adds a `relays` list to the card schema.
 
 ### Publisher behavior

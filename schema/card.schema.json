@@ -107,10 +107,6 @@
           "min_quote_amount",
           "max_quote_amount"
         ],
-        "anyOf": [
-          { "properties": { "max_base_amount": { "type": "integer", "minimum": 1 } } },
-          { "properties": { "max_quote_amount": { "type": "integer", "minimum": 1 } } }
-        ],
         "properties": {
           "pair": {
             "type": "string",

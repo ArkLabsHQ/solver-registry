@@ -236,27 +236,20 @@ export async function discover(opts: DiscoverOptions): Promise<DiscoverResult> {
   return { markets, sources, warnings };
 }
 
-export type SelectOptions = {
+export interface SelectOptions {
   /** Canonical base asset id (e.g. "btc"). */
   baseId: string;
   /** Canonical quote asset id. */
   quoteId: string;
-} & (
-  | {
-      /**
-       * The side the maker wants to receive. When given, only markets with
-       * that side enabled (max > 0) — able to pay it out — match, so a
-       * direction no solver can fill yields no market at all.
-       */
-      wantSide?: Side;
-      wantAmount?: never;
-    }
-  | {
-      wantSide: Side;
-      /** Trade size (atomic units) on `wantSide`, checked against that side's bounds. */
-      wantAmount: bigint | number;
-    }
-);
+  /**
+   * The side the maker wants to receive. When given, only markets with that
+   * side enabled (max > 0) — able to pay it out — match, so a direction no
+   * solver can fill yields no market at all.
+   */
+  wantSide?: Side;
+  /** Trade size (atomic units) on `wantSide`, checked against that side's bounds. Requires `wantSide`. */
+  wantAmount?: bigint | number;
+}
 
 export interface MarketPair {
   /** Display label from the first ranked market for this id pair. */
@@ -325,10 +318,10 @@ export function listMarkets<T extends IndexMarket>(markets: T[]): MarketPair[] {
   return [...byPair.values()];
 }
 
-export type BestMarketOptions = SelectOptions & {
+export interface BestMarketOptions extends SelectOptions {
   /** Zero-based match offset. Use 1 to select the second-ranked market. */
   cursor?: number;
-};
+}
 
 /** The best matching market, or a later match when `cursor` is set. */
 export function bestMarket<T extends IndexMarket>(markets: T[], opts: BestMarketOptions): T | null {

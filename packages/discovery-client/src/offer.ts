@@ -18,9 +18,6 @@ import {
 import { toAtomic, fromAtomic, displayPriceString } from "./assets.ts";
 import { fetchFeedValue, type FetchFeedOptions } from "./feed.ts";
 
-/** Which side of the pair the maker deposits. `base` = give base, receive quote. */
-export type OfferSide = Side;
-
 export interface OfferAmount {
   asset: AssetInfo;
   atomic: bigint;
@@ -28,18 +25,15 @@ export interface OfferAmount {
 }
 
 /**
- * The size-limit check for a plan: applied to the side the maker receives.
- * The checked amount (and its asset) is the plan's `receive`.
+ * The size-limit check for a plan: applied to the side the maker receives (the
+ * opposite of `plan.give`). The checked amount (and its asset) is the plan's
+ * `receive`.
  */
 export interface OfferPlanLimits {
-  /** The side the limits were checked on — what the maker receives, the solver pays out. */
-  side: Side;
-  /** Bounds for that side; null when the side is disabled (max = 0). */
+  /** Bounds for the receive side; null when it is disabled (max = 0) — the market cannot pay it out. */
   min: OfferAmount | null;
   max: OfferAmount | null;
-  /** Whether the receive side is enabled (max > 0) — the solver can pay it out. */
-  solvable: boolean;
-  /** Whether the received amount sits within [min, max]. Always false when not solvable. */
+  /** Whether the received amount sits within [min, max]. Always false when the side is disabled. */
   withinLimits: boolean;
 }
 
@@ -47,7 +41,7 @@ export interface OfferPlan {
   market: Market;
   direction: Direction;
   /** The side the maker gives. */
-  give: OfferSide;
+  give: Side;
   /** What the maker sends. */
   deposit: OfferAmount;
   /** What the maker receives (the want amount to request in the offer). */
@@ -82,7 +76,7 @@ type ResolvedOfferAmount =
 export type PlanOfferInput = {
   market: Market;
   /** Which side the maker deposits. */
-  give: OfferSide;
+  give: Side;
   /** Raw value already read from the market's `price_feed`. */
   feedValue: string | number;
   safetyBps?: number;
@@ -138,7 +132,7 @@ function depositForWant(input: {
  * synchronous. `give: "base"` deposits the base asset and receives the quote;
  * `give: "quote"` is the reverse (priced with 1/P). The size-limit check runs
  * on the received side — the side the solver must pay out — so a market whose
- * receive side is disabled (max = 0) reports `solvable: false`.
+ * receive side is disabled (max = 0) reports `limits.min/max: null`.
  */
 export function planOffer(input: PlanOfferInput): OfferPlan {
   const { market, give } = input;
@@ -146,7 +140,6 @@ export function planOffer(input: PlanOfferInput): OfferPlan {
   const quote = market.quote_asset;
   const depositAsset = give === "base" ? base : quote;
   const receiveAsset = give === "base" ? quote : base;
-  const receiveSide = otherSide(give);
   const direction: Direction = give === "base" ? "baseToQuote" : "quoteToBase";
   const safetyBps = input.safetyBps ?? DEFAULT_SAFETY_BPS;
   const price = deriveAtomicPrice(input.feedValue, market);
@@ -180,7 +173,7 @@ export function planOffer(input: PlanOfferInput): OfferPlan {
     quotePrecision: quote.precision,
   });
 
-  const bounds = sideLimits(market, receiveSide);
+  const bounds = sideLimits(market, otherSide(give));
   return {
     market,
     direction,
@@ -191,17 +184,15 @@ export function planOffer(input: PlanOfferInput): OfferPlan {
     priceDisplay,
     safetyBps,
     limits: {
-      side: receiveSide,
       min: bounds && amount(receiveAsset, BigInt(bounds.min)),
       max: bounds && amount(receiveAsset, BigInt(bounds.max)),
-      solvable: bounds !== null,
       withinLimits: bounds !== null && receiveAtomic >= bounds.min && receiveAtomic <= bounds.max,
     },
   };
 }
 
 export type QuoteOfferOptions = FetchFeedOptions & {
-  give: OfferSide;
+  give: Side;
   safetyBps?: number;
 } & OfferAmountInput;
 

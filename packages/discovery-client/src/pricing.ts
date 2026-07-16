@@ -146,17 +146,6 @@ export function computeWantAmount(input: WantAmountInput): bigint {
   return (deposit * price.den * net) / (price.num * 10000n);
 }
 
-/** The market fields carrying the per-side size bounds. */
-export type MarketLimits = Pick<
-  Market,
-  "min_base_amount" | "max_base_amount" | "min_quote_amount" | "max_quote_amount"
->;
-
-/** The side the maker receives — and the solver pays out — for a direction. */
-export function wantSideOf(direction: Direction): Side {
-  return direction === "baseToQuote" ? "quote" : "base";
-}
-
 /** The opposite side of a pair: what the maker receives when giving `side`. */
 export function otherSide(side: Side): Side {
   return side === "base" ? "quote" : "base";
@@ -171,7 +160,7 @@ export function otherSide(side: Side): Side {
  * bigint amounts compare exactly against them (`amount >= limits.min`), so
  * callers inline the range check rather than going through another helper.
  */
-export function sideLimits(market: MarketLimits, side: Side): { min: number; max: number } | null {
+export function sideLimits(market: Market, side: Side): { min: number; max: number } | null {
   const min = side === "base" ? market.min_base_amount : market.min_quote_amount;
   const max = side === "base" ? market.max_base_amount : market.max_quote_amount;
   return max > 0 ? { min, max } : null;
@@ -200,9 +189,7 @@ export interface Quote {
   /** Human-readable price at 8 decimals (display only). */
   priceDecimalString: string;
   safetyBps: number;
-  /** The side the maker receives; size limits are checked on this side. */
-  wantSide: Side;
-  /** Whether the want side is enabled (max > 0) — the solver can pay it out. */
+  /** Whether the maker's receive side is enabled (max > 0) — the solver can pay it out. */
   solvable: boolean;
   /** Whether `wantAmount` sits within the want side's [min, max]. Always false when not solvable. */
   withinLimits: boolean;
@@ -229,8 +216,7 @@ export function quoteMarket(input: QuoteInput): Quote {
   const deposit = toBigIntAmount(input.deposit, "deposit");
   const price = deriveAtomicPrice(input.feedValue, market);
   const wantAmount = computeWantAmount({ deposit, direction, price, feeBps: market.fee_bps, safetyBps });
-  const wantSide = wantSideOf(direction);
-  const limits = sideLimits(market, wantSide);
+  const limits = sideLimits(market, direction === "baseToQuote" ? "quote" : "base");
   return {
     market,
     direction,
@@ -239,7 +225,6 @@ export function quoteMarket(input: QuoteInput): Quote {
     price,
     priceDecimalString: rationalToDecimalString(price, 8),
     safetyBps,
-    wantSide,
     solvable: limits !== null,
     withinLimits: limits !== null && wantAmount >= limits.min && wantAmount <= limits.max,
   };

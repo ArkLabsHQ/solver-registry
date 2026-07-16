@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { toAtomic, fromAtomic, displayPrice, displayPriceString } from "../src/assets.ts";
 import { planOffer, quoteOffer } from "../src/offer.ts";
 import type { Market } from "../src/types.ts";
-import { makeMarket, makeOneSidedMarket, mockFetch } from "./helpers.ts";
+import { makeMarket, mockFetch } from "./helpers.ts";
 
 // --- conversion (Arkade Assets are precision 8) ---
 
@@ -47,11 +47,12 @@ test("displayPrice: equal precision is identity, cross precision scales", () => 
 
 const DEPIX_ID = "4".repeat(68);
 
-function arkadeMarket(): Market {
+function arkadeMarket(overrides: Partial<Market> = {}): Market {
   return makeMarket({
     pair: "BTC/DePix",
     quote_asset: { id: DEPIX_ID, name: "Decentralized Pix", ticker: "DePix", precision: 8 },
     price_feed: "https://feed.example.com/depix",
+    ...overrides,
   });
 }
 
@@ -74,8 +75,6 @@ test("planOffer: give base, receive quote (human amounts, precision 8)", () => {
   assert.equal(plan.receive.asset.ticker, "DePix");
   assert.equal(plan.priceDisplay, "377000.00000000");
   // Limits are checked on the received (quote) side — the side the solver pays out.
-  assert.equal(plan.limits.side, "quote");
-  assert.equal(plan.limits.solvable, true);
   assert.equal(plan.limits.withinLimits, true);
   assert.equal(plan.limits.min!.display, "0.01"); // 1_000_000 quote atomic
   assert.equal(plan.limits.min!.asset.ticker, "DePix");
@@ -97,30 +96,23 @@ test("planOffer: give quote, receive base (reverse, priced with 1/P)", () => {
   assert.equal(plan.receive.display, "0.00992");
   assert.equal(plan.receive.asset.ticker, "BTC");
   // base side (received) 992_000 within [1000, 5_000_000]
-  assert.equal(plan.limits.side, "base");
-  assert.equal(plan.limits.solvable, true);
   assert.equal(plan.limits.withinLimits, true);
   assert.equal(plan.limits.min!.display, "0.00001"); // 1000 sats
   assert.equal(plan.limits.max!.display, "0.05"); // 5_000_000 sats
 });
 
-test("planOffer: a market with no bounds on the received side is not solvable", () => {
+test("planOffer: a disabled receive side yields null bounds and never passes limits", () => {
   // The solver only pays out quote; a maker giving quote (receiving base) can't be served.
   const plan = planOffer({
-    market: makeOneSidedMarket("quote", {
-      pair: "BTC/DePix",
-      quote_asset: { id: DEPIX_ID, name: "Decentralized Pix", ticker: "DePix", precision: 8 },
-    }),
+    market: arkadeMarket({ min_base_amount: 0, max_base_amount: 0 }),
     give: "quote",
     giveAmount: "3770",
     feedValue: "377000",
     safetyBps: 50,
   });
-  assert.equal(plan.limits.side, "base");
-  assert.equal(plan.limits.solvable, false);
-  assert.equal(plan.limits.withinLimits, false);
   assert.equal(plan.limits.min, null);
   assert.equal(plan.limits.max, null);
+  assert.equal(plan.limits.withinLimits, false);
 });
 
 test("planOffer: accepts a raw atomic bigint give amount", () => {

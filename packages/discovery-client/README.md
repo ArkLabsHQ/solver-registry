@@ -163,9 +163,9 @@ absorbs feed movement between funding and fill.
 Markets carry size limits for both sides (`min|max_base_amount`,
 `min|max_quote_amount`), and `max = 0` disables a side — the solver cannot pay
 it out, so a market with zeroed base bounds only serves `give: "base"`. Plans
-check the received side — `plan.limits.solvable` says whether the market can
-pay that side at all, and `plan.limits.withinLimits` whether the received
-amount sits inside its `[min, max]`.
+check the received side: `plan.limits.min === null` means the market cannot pay
+that side at all, and `plan.limits.withinLimits` says whether the received
+amount sits inside `[min, max]`.
 
 ## Roadmap
 
