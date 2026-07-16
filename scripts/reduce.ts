@@ -105,7 +105,10 @@ export function reduceNetwork(
         messages.push(
           `duplicate name "${card.name}" (also used by ${seenNames.get(card.name)})`,
         );
-      } else {
+      } else if (schemaOk) {
+        // Only structurally valid cards claim their name: a schema-broken card
+        // must not make a later valid card report "duplicate name" for a file
+        // it never touched.
         seenNames.set(card.name, file);
       }
     }

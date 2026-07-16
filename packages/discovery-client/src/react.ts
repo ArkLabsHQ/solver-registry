@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { fetchFeedValue, type FetchFeedOptions } from "./feed.ts";
 import { planOffer, type OfferPlan } from "./offer.ts";
@@ -105,6 +105,15 @@ export function useOfferQuote(
   const [wantAmount, setWantAmountValue] = useState(() => initialAmount(initialWantAmount));
   const [quoteState, setQuoteState] = useState<QuoteState | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  // Read the fetch implementation through a ref so an inline `fetchImpl`
+  // lambda (a new identity every render) cannot re-arm the effect after each
+  // completed fetch and poll the feed forever.
+  const fetchImplRef = useRef(fetchImpl);
+  fetchImplRef.current = fetchImpl;
+  // The last machine-written mirror amount, tagged with the identity it was
+  // computed for, so a market/direction switch can clear it — unless the user
+  // has overwritten it since.
+  const mirrorRef = useRef<{ key: string; give: Side; input: OfferQuoteInputSide; value: string } | null>(null);
 
   const setGiveAmount = useCallback((amount: string) => {
     setActiveInput("give");
@@ -145,6 +154,18 @@ export function useOfferQuote(
 
   useEffect(() => {
     const carried = (s: QuoteState | null) => matching(s, marketKey, give);
+
+    // The mirrored counterpart amount lives outside the identity-keyed atom
+    // (it is a user-editable input): when it was machine-written for another
+    // (market, give) identity and the user has not touched it since, clear it
+    // so another market's computed amount is never shown under this one.
+    const mirror = mirrorRef.current;
+    if (mirror && (mirror.key !== marketKey || mirror.give !== give)) {
+      const clearIfUnedited = (prev: string) => (prev === mirror.value ? "" : prev);
+      if (mirror.input === "give") setWantAmountValue(clearIfUnedited);
+      else setGiveAmountValue(clearIfUnedited);
+      mirrorRef.current = null;
+    }
 
     if (!market || !solvable || activeAmount.trim() === "") {
       // Nothing to quote: no market, a receive side the market cannot pay out
@@ -202,7 +223,7 @@ export function useOfferQuote(
           selectedMarket.price_feed,
           selectedMarket.price_feed_schema,
           {
-            fetchImpl,
+            fetchImpl: fetchImplRef.current,
             signal: controller.signal,
             timeoutMs,
           },
@@ -233,8 +254,10 @@ export function useOfferQuote(
           status: "success",
           error: null,
         });
-        if (activeInput === "give") setWantAmountValue(nextPlan.receive.display);
-        else setGiveAmountValue(nextPlan.deposit.display);
+        const mirrored = activeInput === "give" ? nextPlan.receive.display : nextPlan.deposit.display;
+        mirrorRef.current = { key, give, input: activeInput, value: mirrored };
+        if (activeInput === "give") setWantAmountValue(mirrored);
+        else setGiveAmountValue(mirrored);
       } catch (err) {
         if (cancelled || controller.signal.aborted) return;
         setQuoteState((s) => ({
@@ -257,7 +280,7 @@ export function useOfferQuote(
     };
     // `market` is deliberately keyed by value (marketKey): a re-created but
     // byte-identical market object must not abort and refetch.
-  }, [activeAmount, activeInput, fetchImpl, give, marketKey, refreshNonce, safetyBps, signal, solvable, timeoutMs]);
+  }, [activeAmount, activeInput, give, marketKey, refreshNonce, safetyBps, signal, solvable, timeoutMs]);
 
   return useMemo(() => {
     const baseAmount = give === "base" ? giveAmount : wantAmount;

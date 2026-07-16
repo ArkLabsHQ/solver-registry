@@ -144,7 +144,7 @@ package entrypoint does not import React.
 | `fetchIndex(url, opts)` | Fetch + validate a single per-network index (never throws). Defaults to `network: "bitcoin"`. |
 | `listMarkets(markets)` | List available id pairs, how many solver candidates each pair has, and how many can pay out each side (`solvable.base` / `solvable.quote`). |
 | `selectMarkets(markets, {baseId, quoteId, wantSide?, wantAmount?})` / `bestMarket(..., {cursor?})` | Filter to one id pair — and optionally to markets that can pay out `wantSide`, sized by `wantAmount` on that side — keeping the ranking. `cursor: 1` selects the second-ranked market. |
-| `sideLimits(market, side)` | The side's `{ min, max }` bounds as exact bigints, or `null` when it's disabled (`max = "0"`) — the solver cannot pay that side out. The single per-side solvability + size-bound primitive. |
+| `sideLimits(market, side)` | The side's `{ min, max }` bounds as exact bigints, or `null` when the solver cannot pay that side out — disabled (`max = "0"`) or carrying malformed/validation-rejected bounds. The single per-side solvability + size-bound primitive. |
 | `quoteOffer(market, {give, giveAmount \| wantAmount, safetyBps?})` | Fetch the feed and build a full `OfferPlan` (human in/out). |
 | `planOffer({market, give, giveAmount \| wantAmount, feedValue, safetyBps?})` | Same, from an already-fetched feed value (pure/sync). |
 | `priceMarket(market, {deposit, direction, safetyBps?})` | Lower-level: fetch feed → atomic `Quote` (`wantAmount`). |

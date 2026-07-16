@@ -197,7 +197,7 @@ export interface Quote {
   /** Human-readable price at 8 decimals (display only). */
   priceDecimalString: string;
   safetyBps: number;
-  /** Whether the maker's receive side is enabled (max > 0) — the solver can pay it out. */
+  /** Whether the solver can pay out the maker's receive side: enabled (max > 0) with well-formed bounds. */
   solvable: boolean;
   /** Whether `wantAmount` sits within the want side's [min, max]. Always false when not solvable. */
   withinLimits: boolean;
