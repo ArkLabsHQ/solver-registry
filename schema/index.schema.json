@@ -106,8 +106,22 @@
           "max_quote_amount"
         ],
         "anyOf": [
-          { "properties": { "max_base_amount": { "type": "integer", "minimum": 1 } } },
-          { "properties": { "max_quote_amount": { "type": "integer", "minimum": 1 } } }
+          {
+            "properties": {
+              "max_base_amount": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,29}$"
+              }
+            }
+          },
+          {
+            "properties": {
+              "max_quote_amount": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,29}$"
+              }
+            }
+          }
         ],
         "properties": {
           "pair": {
@@ -149,28 +163,28 @@
             "maximum": 10000
           },
           "min_base_amount": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991,
-            "description": "Lower trade-size bound for the base side, in base atomic units. An enabled side has 1 <= min <= max; when the side is disabled (max = 0) min MUST be 0."
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,29})$",
+            "maxLength": 30,
+            "description": "Lower trade-size bound for the base side, as a decimal string of base atomic units. An enabled side has 1 <= min <= max; when the side is disabled (max = \"0\") min MUST be \"0\"."
           },
           "max_base_amount": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991,
-            "description": "Upper trade-size bound for the base side, in base atomic units. 0 disables the side: the solver does not pay out base and makers cannot receive it."
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,29})$",
+            "maxLength": 30,
+            "description": "Upper trade-size bound for the base side, as a decimal string of base atomic units. \"0\" disables the side: the solver does not pay out base and makers cannot receive it."
           },
           "min_quote_amount": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991,
-            "description": "Lower trade-size bound for the quote side, in quote atomic units. An enabled side has 1 <= min <= max; when the side is disabled (max = 0) min MUST be 0."
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,29})$",
+            "maxLength": 30,
+            "description": "Lower trade-size bound for the quote side, as a decimal string of quote atomic units. An enabled side has 1 <= min <= max; when the side is disabled (max = \"0\") min MUST be \"0\"."
           },
           "max_quote_amount": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991,
-            "description": "Upper trade-size bound for the quote side, in quote atomic units. 0 disables the side: the solver does not pay out quote and makers cannot receive it."
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,29})$",
+            "maxLength": 30,
+            "description": "Upper trade-size bound for the quote side, as a decimal string of quote atomic units. \"0\" disables the side: the solver does not pay out quote and makers cannot receive it."
           }
         }
       }

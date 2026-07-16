@@ -35,6 +35,14 @@ export interface PriceFeedSchema {
 /** One side of a market pair. */
 export type Side = "base" | "quote";
 
+/**
+ * Canonical wire encoding for atomic amounts: an unsigned decimal string with
+ * no leading zeros, bounded to 30 digits. Strings keep amounts exact — JSON
+ * numbers silently round past 2^53, which cannot even hold one whole token of
+ * an 18-precision asset. One canonical form also keeps card signatures stable.
+ */
+export const AMOUNT_PATTERN = /^(0|[1-9][0-9]{0,29})$/;
+
 /** A single market as advertised by a solver. */
 export interface Market {
   /** Display label "<base-ticker>/<quote-ticker>"; identity is (base_asset.id, quote_asset.id). */
@@ -50,15 +58,16 @@ export interface Market {
   /** The solver's spread, in basis points. Sort key: lower is better expected execution. */
   fee_bps: number;
   /**
-   * Per-side trade-size bounds in that side's atomic units, always present.
-   * `max = 0` disables the side: the solver cannot pay it out (solve it), so
-   * makers cannot receive it — `min` is then 0 too. An enabled side has
-   * 1 <= min <= max, and at least one side is enabled.
+   * Per-side trade-size bounds as decimal strings of that side's atomic units
+   * (see {@link AMOUNT_PATTERN}), always present. `max = "0"` disables the
+   * side: the solver cannot pay it out (solve it), so makers cannot receive
+   * it — `min` is then `"0"` too. An enabled side has 1 <= min <= max, and at
+   * least one side is enabled.
    */
-  min_base_amount: number;
-  max_base_amount: number;
-  min_quote_amount: number;
-  max_quote_amount: number;
+  min_base_amount: string;
+  max_base_amount: string;
+  min_quote_amount: string;
+  max_quote_amount: string;
 }
 
 /** A card is one solver's market listing for one network (what a solver PRs / a user pins). */

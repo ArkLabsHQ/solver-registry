@@ -30,7 +30,7 @@ export interface OfferAmount {
  * `receive`.
  */
 export interface OfferPlanLimits {
-  /** Bounds for the receive side; null when it is disabled (max = 0) — the market cannot pay it out. */
+  /** Bounds for the receive side; null when it is disabled (max = "0") — the market cannot pay it out. */
   min: OfferAmount | null;
   max: OfferAmount | null;
   /** Whether the received amount sits within [min, max]. Always false when the side is disabled. */
@@ -132,7 +132,7 @@ function depositForWant(input: {
  * synchronous. `give: "base"` deposits the base asset and receives the quote;
  * `give: "quote"` is the reverse (priced with 1/P). The size-limit check runs
  * on the received side — the side the solver must pay out — so a market whose
- * receive side is disabled (max = 0) reports `limits.min/max: null`.
+ * receive side is disabled (max = "0") reports `limits.min/max: null`.
  */
 export function planOffer(input: PlanOfferInput): OfferPlan {
   const { market, give } = input;
@@ -184,8 +184,8 @@ export function planOffer(input: PlanOfferInput): OfferPlan {
     priceDisplay,
     safetyBps,
     limits: {
-      min: bounds && amount(receiveAsset, BigInt(bounds.min)),
-      max: bounds && amount(receiveAsset, BigInt(bounds.max)),
+      min: bounds && amount(receiveAsset, bounds.min),
+      max: bounds && amount(receiveAsset, bounds.max),
       withinLimits: bounds !== null && receiveAtomic >= bounds.min && receiveAtomic <= bounds.max,
     },
   };

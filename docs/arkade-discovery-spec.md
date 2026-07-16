@@ -31,10 +31,10 @@ One file per solver per network, `solvers/<network>/<name>.json` (networks: `bit
       "price_feed_schema": { "type": "json", "price_path": "/price" },
       "price_decimals": 8,
       "fee_bps": 30,
-      "min_base_amount": 1000,
-      "max_base_amount": 5000000,
-      "min_quote_amount": 1000000,
-      "max_quote_amount": 5000000000
+      "min_base_amount": "1000",
+      "max_base_amount": "5000000",
+      "min_quote_amount": "1000000",
+      "max_quote_amount": "5000000000"
     }
   ]
 }
@@ -53,7 +53,7 @@ Field semantics:
 | `price_feed_schema` | How to read the numeric feed value from the response. v0 supports `{ "type": "json", "price_path": "<RFC 6901 JSON Pointer>" }`. Examples: Binance ticker price uses `/price`; CoinGecko simple price for `ids=bitcoin&vs_currencies=usd` uses `/bitcoin/usd`; a bare JSON number uses the empty pointer `""`. The pointer MUST resolve to a JSON number or numeric string. Clients MUST NOT infer by scanning arbitrary response bodies. |
 | `price_decimals` | How to normalize the feed's value to quote-units-per-base-unit: the feed value divided by `10^price_decimals` MUST be the price in quote-atomic-units per base-atomic-unit. Mirrors the solver Pair config; the feed is always advertised in base/quote terms, never inverted. |
 | `fee_bps` | The solver's spread: the promise is that an offer priced at least `fee_bps` (plus a reasonable safety cushion) inside fair value will fill. The solver's fill-time tolerance check is internal and MUST be wide enough to honor this; a solver whose published fee doesn't fill loses flow. |
-| `min_base_amount`, `max_base_amount`, `min_quote_amount`, `max_quote_amount` | Per-side trade size bounds, expressed in that side's asset units (sats when the side is BTC). All four are REQUIRED. `max = 0` disables the side — the solver does not pay it out (solve it) and makers MUST NOT take the direction that receives it; `min` MUST then also be 0. An enabled side has `1 <= min <= max`, and at least one side MUST be enabled. The bound applies to the amount the maker receives (the solver pays) on that side: a solver that zeroes the base bounds only serves makers depositing base to receive quote; enabling both sides serves both directions. |
+| `min_base_amount`, `max_base_amount`, `min_quote_amount`, `max_quote_amount` | Per-side trade size bounds as **decimal strings** of that side's atomic units (sats when the side is BTC), canonical form `^(0\|[1-9][0-9]{0,29})$` — no sign, no leading zeros. Strings keep amounts exact: JSON numbers round past 2^53, which cannot hold even one whole token of an 18-precision asset, and a single canonical encoding keeps card signatures stable. All four are REQUIRED. `max = "0"` disables the side — the solver does not pay it out (solve it) and makers MUST NOT take the direction that receives it; `min` MUST then also be `"0"`. An enabled side has `1 <= min <= max` (compared as integers), and at least one side MUST be enabled. The bound applies to the amount the maker receives (the solver pays) on that side: a solver that zeroes the base bounds only serves makers depositing base to receive quote; enabling both sides serves both directions. |
 
 Keys and signatures are future-proofing, not a v0 requirement: requiring signing tooling just to list a market is friction without a v0 payoff, so a bare card with neither field is fully valid and the PR is the authentication. Solvers that set them up now get continuity — the same key later signs v1 quotes, and card updates become verifiable independent of who opens the PR. No `updated_at`: hand-maintained timestamps rot; freshness is stamped programmatically in the index. No URLs pointing at solver or ark infrastructure (`price_feed` excepted).
 
@@ -84,10 +84,10 @@ On every merge to the default branch, CI, independently per network directory:
       "price_feed_schema": { "type": "json", "price_path": "/price" },
       "price_decimals": 8,
       "fee_bps": 30,
-      "min_base_amount": 1000,
-      "max_base_amount": 5000000,
-      "min_quote_amount": 1000000,
-      "max_quote_amount": 5000000000
+      "min_base_amount": "1000",
+      "max_base_amount": "5000000",
+      "min_quote_amount": "1000000",
+      "max_quote_amount": "5000000000"
     }
   ]
 }
@@ -170,10 +170,10 @@ content: {
   "pair": "<base-id>/<quote-id>",
   "price": "1.00020000",
   "fee_bps": 30,
-  "min_base_amount": 1000,
-  "max_base_amount": 5000000,
-  "min_quote_amount": 1000000,
-  "max_quote_amount": 5000000000,
+  "min_base_amount": "1000",
+  "max_base_amount": "5000000",
+  "min_quote_amount": "1000000",
+  "max_quote_amount": "5000000000",
   "feed": "https://feed.example.com/price?pair=..."
 }
 ```

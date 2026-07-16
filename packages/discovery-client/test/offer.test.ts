@@ -104,7 +104,7 @@ test("planOffer: give quote, receive base (reverse, priced with 1/P)", () => {
 test("planOffer: a disabled receive side yields null bounds and never passes limits", () => {
   // The solver only pays out quote; a maker giving quote (receiving base) can't be served.
   const plan = planOffer({
-    market: arkadeMarket({ min_base_amount: 0, max_base_amount: 0 }),
+    market: arkadeMarket({ min_base_amount: "0", max_base_amount: "0" }),
     give: "quote",
     giveAmount: "3770",
     feedValue: "377000",

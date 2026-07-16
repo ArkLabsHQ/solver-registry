@@ -47,34 +47,39 @@ const CARD_REJECTIONS: Array<{ name: string; mutate: (c: any) => void; expect: R
     mutate: (c) => (c.markets[0].base_asset.extra = true),
     expect: /base_asset\/extra is not an allowed property/,
   },
-  { name: "base min > max", mutate: (c) => (c.markets[0].min_base_amount = 9_000_000), expect: /min_base_amount \(9000000\) > max_base_amount/ },
+  { name: "base min > max", mutate: (c) => (c.markets[0].min_base_amount = "9000000"), expect: /min_base_amount \(9000000\) > max_base_amount/ },
   {
     name: "quote min > max",
-    mutate: (c) => (c.markets[0].min_quote_amount = 2_000_000_000_000_000),
+    mutate: (c) => (c.markets[0].min_quote_amount = "2000000000000000"),
     expect: /min_quote_amount \(2000000000000000\) > max_quote_amount/,
   },
   {
     name: "missing limit field",
     mutate: (c) => delete c.markets[0].max_quote_amount,
-    expect: /max_quote_amount must be an integer in 0\.\./,
+    expect: /max_quote_amount must be a decimal string/,
   },
   {
     name: "zero min on an enabled side",
-    mutate: (c) => (c.markets[0].min_quote_amount = 0),
+    mutate: (c) => (c.markets[0].min_quote_amount = "0"),
     expect: /min_quote_amount must be >= 1 when max_quote_amount > 0/,
   },
   {
-    name: "amount above Number.MAX_SAFE_INTEGER",
-    mutate: (c) => (c.markets[0].max_quote_amount = 9007199254740992),
-    expect: /max_quote_amount must be an integer in 0\.\.9007199254740991/,
+    name: "number amount (wrong encoding)",
+    mutate: (c) => (c.markets[0].max_quote_amount = 5000000),
+    expect: /max_quote_amount must be a decimal string/,
+  },
+  {
+    name: "non-canonical amount (leading zeros)",
+    mutate: (c) => (c.markets[0].min_base_amount = "0100"),
+    expect: /min_base_amount must be a decimal string/,
   },
   {
     name: "both sides disabled",
     mutate: (c) => {
-      c.markets[0].min_base_amount = 0;
-      c.markets[0].max_base_amount = 0;
-      c.markets[0].min_quote_amount = 0;
-      c.markets[0].max_quote_amount = 0;
+      c.markets[0].min_base_amount = "0";
+      c.markets[0].max_base_amount = "0";
+      c.markets[0].min_quote_amount = "0";
+      c.markets[0].max_quote_amount = "0";
     },
     expect: /at least one side/,
   },

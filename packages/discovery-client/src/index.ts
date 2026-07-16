@@ -13,6 +13,7 @@
 export {
   NETWORKS,
   DEFAULT_NETWORK,
+  AMOUNT_PATTERN,
   isNetwork,
   type Network,
   type AssetInfo,

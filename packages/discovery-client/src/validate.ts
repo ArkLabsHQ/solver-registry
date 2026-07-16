@@ -7,7 +7,7 @@
 // cross-field rules the reducer enforces, with no `eval` and no dependencies.
 
 import type { AssetInfo, Card, NetworkIndex } from "./types.ts";
-import { isNetwork } from "./types.ts";
+import { AMOUNT_PATTERN, isNetwork } from "./types.ts";
 
 export interface ValidationResult<T> {
   ok: boolean;
@@ -28,15 +28,13 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-/**
- * Amounts above Number.MAX_SAFE_INTEGER round during JSON parsing, so the
- * validated bound could differ from what the solver wrote. Mirrored by the
- * schemas' `maximum` on the four limit fields.
- */
-const MAX_AMOUNT = 9007199254740991;
-
 function isInt(v: unknown): v is number {
   return typeof v === "number" && Number.isSafeInteger(v);
+}
+
+/** A canonical decimal-string amount (see {@link AMOUNT_PATTERN}). */
+function isAmount(v: unknown): v is string {
+  return typeof v === "string" && AMOUNT_PATTERN.test(v);
 }
 
 // Errors accumulate as path-tagged strings in a plain array; these helpers
@@ -120,24 +118,27 @@ type LimitKey = (typeof LIMIT_SIDES)[number][number];
  * Cross-field size-limit rules, shared with the reducer (`scripts/reduce.ts`
  * imports this) so CI and clients reject the same cards with the same words:
  * per-side min <= max, min >= 1 on an enabled side (max > 0), and at least one
- * side enabled. Field type/range errors are the schema layer's job — sides
- * whose fields are not integers are skipped here.
+ * side enabled. Bounds compare as exact bigints. Encoding errors are the
+ * schema layer's job — sides whose fields are not canonical decimal strings
+ * are skipped here.
  */
 export function marketLimitErrors(market: { [key in LimitKey]?: unknown }): string[] {
   const errors: string[] = [];
   let checkedSides = 0;
   let enabledSides = 0;
   for (const [minKey, maxKey] of LIMIT_SIDES) {
-    const min = market[minKey];
-    const max = market[maxKey];
-    if (!isInt(min) || !isInt(max)) continue;
+    const minRaw = market[minKey];
+    const maxRaw = market[maxKey];
+    if (!isAmount(minRaw) || !isAmount(maxRaw)) continue;
     checkedSides++;
+    const min = BigInt(minRaw);
+    const max = BigInt(maxRaw);
     if (min > max) {
-      errors.push(`${minKey} (${min}) > ${maxKey} (${max})`);
-    } else if (max > 0 && min < 1) {
+      errors.push(`${minKey} (${minRaw}) > ${maxKey} (${maxRaw})`);
+    } else if (max > 0n && min < 1n) {
       errors.push(`${minKey} must be >= 1 when ${maxKey} > 0`);
     }
-    if (max > 0) enabledSides++;
+    if (max > 0n) enabledSides++;
   }
   if (checkedSides === LIMIT_SIDES.length && enabledSides === 0) {
     errors.push("must enable size limits for at least one side (max > 0)");
@@ -192,12 +193,12 @@ function checkMarket(errors: string[], path: string, v: unknown, strict: boolean
   checkIntRange(errors, `${path}/price_decimals`, v.price_decimals, 0, 18);
   checkIntRange(errors, `${path}/fee_bps`, v.fee_bps, 0, 10000);
 
-  // Per-side size bounds, always present as safe integers >= 0; the
+  // Per-side size bounds, always present as canonical decimal strings; the
   // cross-field rules (min <= max, min >= 1 when enabled, one side enabled)
   // live in marketLimitErrors, shared with the reducer.
   for (const [minKey, maxKey] of LIMIT_SIDES) {
-    checkIntRange(errors, `${path}/${minKey}`, v[minKey], 0, MAX_AMOUNT);
-    checkIntRange(errors, `${path}/${maxKey}`, v[maxKey], 0, MAX_AMOUNT);
+    checkPattern(errors, `${path}/${minKey}`, v[minKey], AMOUNT_PATTERN, 'must be a decimal string of atomic units ("0" disables the side)');
+    checkPattern(errors, `${path}/${maxKey}`, v[maxKey], AMOUNT_PATTERN, 'must be a decimal string of atomic units ("0" disables the side)');
   }
   for (const message of marketLimitErrors(v)) add(errors, path, message);
 }

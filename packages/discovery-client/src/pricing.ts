@@ -6,7 +6,7 @@
 // amount of 10^14 atomic units round-trip without loss. BigInt is available in
 // every target (modern browsers, Node, and Hermes / React Native).
 
-import type { Market, Side } from "./types.ts";
+import { AMOUNT_PATTERN, type Market, type Side } from "./types.ts";
 
 /** An exact non-negative rational number. `den` is always > 0. */
 export interface Rational {
@@ -152,23 +152,29 @@ export function otherSide(side: Side): Side {
 }
 
 /**
- * A market's [min, max] bounds for one side, in that side's atomic units, or
- * null when the side is disabled (`max = 0`) — i.e. the solver cannot pay out
- * (solve) that side and makers must not take the direction that receives it.
- * Malformed bounds (missing, fractional, strings, beyond 2^53) also read as
- * disabled, so unvalidated input fails safe everywhere instead of crashing or
- * coercing in one call site but not another.
+ * A market's [min, max] bounds for one side as exact bigints of that side's
+ * atomic units, or null when the side is disabled (`max = "0"`) — i.e. the
+ * solver cannot pay out (solve) that side and makers must not take the
+ * direction that receives it. Malformed bounds (missing, non-canonical, not a
+ * decimal string) also read as disabled, so unvalidated input fails safe
+ * everywhere instead of crashing or coercing in one call site but not another.
  *
- * The only side -> field-name mapping in the client. Bounds are plain numbers;
- * bigint amounts compare exactly against them (`amount >= limits.min`), so
- * callers inline the range check rather than going through another helper.
+ * The only side -> field-name mapping in the client; callers inline the
+ * bigint range check rather than going through another helper.
  */
-export function sideLimits(market: Market, side: Side): { min: number; max: number } | null {
+export function sideLimits(market: Market, side: Side): { min: bigint; max: bigint } | null {
   const min = side === "base" ? market.min_base_amount : market.min_quote_amount;
   const max = side === "base" ? market.max_base_amount : market.max_quote_amount;
-  return Number.isSafeInteger(max) && max > 0 && Number.isSafeInteger(min) && min >= 0
-    ? { min, max }
-    : null;
+  if (
+    typeof min !== "string" ||
+    typeof max !== "string" ||
+    !AMOUNT_PATTERN.test(min) ||
+    !AMOUNT_PATTERN.test(max) ||
+    max === "0"
+  ) {
+    return null;
+  }
+  return { min: BigInt(min), max: BigInt(max) };
 }
 
 /** Render a rational to a fixed-decimal string (for display only, never pricing). */

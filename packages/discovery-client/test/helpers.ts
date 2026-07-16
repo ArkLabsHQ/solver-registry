@@ -18,20 +18,20 @@ export function makeMarket(overrides: Partial<Market> = {}): Market {
     price_decimals: 0,
     fee_bps: 30,
     // Both sides enabled: the default market solves both directions.
-    min_base_amount: 1000,
-    max_base_amount: 5_000_000,
-    min_quote_amount: 1_000_000,
-    max_quote_amount: 1_000_000_000_000_000,
+    min_base_amount: "1000",
+    max_base_amount: "5000000",
+    min_quote_amount: "1000000",
+    max_quote_amount: "1000000000000000",
     ...overrides,
   };
 }
 
-/** A one-sided market: the other side's bounds are zeroed (max = 0 disables). */
+/** A one-sided market: the other side's bounds are zeroed (max = "0" disables). */
 export function makeOneSidedMarket(solves: "base" | "quote", overrides: Partial<Market> = {}): Market {
   const disabled =
     solves === "base"
-      ? { min_quote_amount: 0, max_quote_amount: 0 }
-      : { min_base_amount: 0, max_base_amount: 0 };
+      ? { min_quote_amount: "0", max_quote_amount: "0" }
+      : { min_base_amount: "0", max_base_amount: "0" };
   return makeMarket({ ...disabled, ...overrides });
 }
 

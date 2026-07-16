@@ -211,9 +211,10 @@ async function renderNetwork(network, container) {
     "Pair", "Solver", "Fee (bps)", "Limits (base)", "Limits (quote)", "Feed price",
   ].map((h) => el("th", { text: h })))]);
 
-  // A side with max = 0 is disabled: the solver does not pay it out.
+  // Amounts are decimal strings (exact past 2^53); max "0" disables the side.
+  const fmtAmount = (v) => { try { return BigInt(v).toLocaleString("en-US"); } catch { return "?"; } };
   const limitsText = (min, max) =>
-    !max ? "—" : `${min.toLocaleString("en-US")} – ${max.toLocaleString("en-US")}`;
+    !max || max === "0" ? "—" : `${fmtAmount(min)} – ${fmtAmount(max)}`;
   const tbody = el("tbody");
   const priceCells = [];
 

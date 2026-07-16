@@ -54,16 +54,22 @@ test("deriveAtomicPrice: rejects a zero/negative price", () => {
 
 test("sideLimits: max > 0 returns bounds, max = 0 (disabled) returns null", () => {
   const both = market();
-  assert.deepEqual(sideLimits(both, "base"), { min: 1000, max: 5_000_000 });
-  assert.deepEqual(sideLimits(both, "quote"), { min: 1_000_000, max: 1_000_000_000_000_000 });
+  assert.deepEqual(sideLimits(both, "base"), { min: 1000n, max: 5_000_000n });
+  assert.deepEqual(sideLimits(both, "quote"), { min: 1_000_000n, max: 1_000_000_000_000_000n });
 
   const quoteOnly = makeOneSidedMarket("quote"); // base bounds zeroed
   assert.equal(sideLimits(quoteOnly, "base"), null);
-  assert.deepEqual(sideLimits(quoteOnly, "quote"), { min: 1_000_000, max: 1_000_000_000_000_000 });
+  assert.deepEqual(sideLimits(quoteOnly, "quote"), { min: 1_000_000n, max: 1_000_000_000_000_000n });
+
+  // Decimal strings carry amounts JSON numbers cannot: exact past 2^53.
+  const huge = market({ max_quote_amount: "9007199254740993" });
+  assert.equal(sideLimits(huge, "quote")!.max, 9007199254740993n);
 
   // Malformed bounds from unvalidated input read as disabled, never crash.
   assert.equal(sideLimits({ ...market(), min_quote_amount: undefined } as never, "quote"), null);
-  assert.equal(sideLimits({ ...market(), max_quote_amount: "1e6" } as never, "quote"), null);
+  assert.equal(sideLimits({ ...market(), max_quote_amount: "1e6" } as never, "quote"), null); // non-canonical
+  assert.equal(sideLimits({ ...market(), max_quote_amount: 1000 } as never, "quote"), null); // number, not string
+  assert.equal(sideLimits({ ...market(), min_quote_amount: "0100" } as never, "quote"), null); // leading zero
 });
 
 test("computeWantAmount: baseToQuote concedes fee + safety and floors", () => {
@@ -132,7 +138,7 @@ test("quoteMarket: end-to-end from a feed value, with limit check (in range)", (
 test("quoteMarket: baseToQuote checks the received quote amount against quote limits", () => {
   // Raise min_quote_amount above the computed wantAmount so the trade is too small.
   const q = quoteMarket({
-    market: market({ min_quote_amount: 10_000_000_000 }),
+    market: market({ min_quote_amount: "10000000000" }),
     feedValue: "65000",
     deposit: 500, // want ~ 500 * 65000 * 0.992 = 32_240_000 < min_quote
     direction: "baseToQuote",
@@ -144,7 +150,7 @@ test("quoteMarket: baseToQuote checks the received quote amount against quote li
 test("quoteMarket: quoteToBase checks limits against the received base amount", () => {
   // Deposit a tiny amount of quote so the resulting base wantAmount is below min.
   const q = quoteMarket({
-    market: market({ min_base_amount: 1000, max_base_amount: 5_000_000 }),
+    market: market({ min_base_amount: "1000", max_base_amount: "5000000" }),
     feedValue: "65000",
     deposit: 100, // quote atomic; wantBase ~ 100/65000 < 1 => below min
     direction: "quoteToBase",
