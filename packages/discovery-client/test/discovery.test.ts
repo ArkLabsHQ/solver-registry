@@ -170,10 +170,10 @@ test("one-sided markets: selection and listing avoid a side no solver can pay ou
   assert.equal(bestMarket(res.markets, { baseId: "btc", quoteId: USDT, wantSide: "base" })!.solver, "frank");
 
   // With only erin present, the base side is not solvable by any market: no pick.
-  const onlyErin = await discover({ localCards: [{ card: erin }], fetchImpl: mockFetch(routes), now: NOW });
-  assert.equal(bestMarket(onlyErin.markets, { baseId: "btc", quoteId: USDT, wantSide: "base" }), null);
-  assert.equal(selectMarkets(onlyErin.markets, { baseId: "btc", quoteId: USDT, wantSide: "base" }).length, 0);
-  assert.deepEqual(listMarkets(onlyErin.markets)[0].solvable, { base: 0, quote: 1 });
+  const onlyErin = res.markets.filter((m) => m.solver === "erin");
+  assert.equal(bestMarket(onlyErin, { baseId: "btc", quoteId: USDT, wantSide: "base" }), null);
+  assert.equal(selectMarkets(onlyErin, { baseId: "btc", quoteId: USDT, wantSide: "base" }).length, 0);
+  assert.deepEqual(listMarkets(onlyErin)[0].solvable, { base: 0, quote: 1 });
 });
 
 test("priceMarket: end-to-end from discovered market to exact want amount", async () => {

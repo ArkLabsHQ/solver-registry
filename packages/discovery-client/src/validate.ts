@@ -107,6 +107,37 @@ const LIMIT_SIDES = [
   ["min_quote_amount", "max_quote_amount"],
 ] as const;
 
+type LimitKey = (typeof LIMIT_SIDES)[number][number];
+
+/**
+ * Cross-field size-limit rules, shared with the reducer (`scripts/reduce.ts`
+ * imports this) so CI and clients reject the same cards with the same words:
+ * per-side min <= max, min >= 1 on an enabled side (max > 0), and at least one
+ * side enabled. Field type/range errors are the schema layer's job — sides
+ * whose fields are not integers are skipped here.
+ */
+export function marketLimitErrors(market: { [key in LimitKey]?: unknown }): string[] {
+  const errors: string[] = [];
+  let checkedSides = 0;
+  let enabledSides = 0;
+  for (const [minKey, maxKey] of LIMIT_SIDES) {
+    const min = market[minKey];
+    const max = market[maxKey];
+    if (!isInt(min) || !isInt(max)) continue;
+    checkedSides++;
+    if (min > max) {
+      errors.push(`${minKey} (${min}) > ${maxKey} (${max})`);
+    } else if (max > 0 && min < 1) {
+      errors.push(`${minKey} must be >= 1 when ${maxKey} > 0`);
+    }
+    if (max > 0) enabledSides++;
+  }
+  if (checkedSides === LIMIT_SIDES.length && enabledSides === 0) {
+    errors.push("must enable size limits for at least one side (max > 0)");
+  }
+  return errors;
+}
+
 /**
  * Validate the market fields common to cards and index entries. Unknown keys
  * are rejected only when `strict` is set (cards); index consumers stay
@@ -140,30 +171,14 @@ function checkMarket(errors: string[], path: string, v: unknown, strict: boolean
   checkIntRange(errors, `${path}/price_decimals`, v.price_decimals, 0, 18);
   checkIntRange(errors, `${path}/fee_bps`, v.fee_bps, 0, 10000);
 
-  // Per-side size bounds, always present. max = 0 disables the side (min must
-  // then be 0 via min <= max); an enabled side has 1 <= min <= max, and at
-  // least one side must be enabled (a market with no solvable side is useless).
-  let enabledSides = 0;
-  let boundsOk = true;
+  // Per-side size bounds, always present as integers >= 0; the cross-field
+  // rules (min <= max, min >= 1 when enabled, one side enabled) live in
+  // marketLimitErrors, shared with the reducer.
   for (const [minKey, maxKey] of LIMIT_SIDES) {
-    const min = v[minKey];
-    const max = v[maxKey];
-    checkIntMin(errors, `${path}/${minKey}`, min, 0);
-    checkIntMin(errors, `${path}/${maxKey}`, max, 0);
-    if (!isInt(min) || !isInt(max)) {
-      boundsOk = false;
-      continue;
-    }
-    if (min > max) {
-      add(errors, path, `${minKey} (${min}) > ${maxKey} (${max})`);
-    } else if (max > 0 && min < 1) {
-      add(errors, path, `${minKey} must be >= 1 when ${maxKey} > 0`);
-    }
-    if (max > 0) enabledSides++;
+    checkIntMin(errors, `${path}/${minKey}`, v[minKey], 0);
+    checkIntMin(errors, `${path}/${maxKey}`, v[maxKey], 0);
   }
-  if (boundsOk && enabledSides === 0) {
-    add(errors, path, "must enable size limits for at least one side (max > 0)");
-  }
+  for (const message of marketLimitErrors(v)) add(errors, path, message);
 }
 
 /** An index entry is a market plus reducer-added provenance (`solver`, optional pubkey). */

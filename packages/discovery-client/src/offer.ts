@@ -11,6 +11,8 @@ import {
   computeWantAmount,
   deriveAtomicPrice,
   sideLimits,
+  wantSideOf,
+  withinSideLimits,
   type Direction,
   type Rational,
 } from "./pricing.ts";
@@ -26,19 +28,19 @@ export interface OfferAmount {
   display: string;
 }
 
-/** The size-limit check for a plan: applied to the side the maker receives. */
+/**
+ * The size-limit check for a plan: applied to the side the maker receives.
+ * The checked amount (and its asset) is the plan's `receive`.
+ */
 export interface OfferPlanLimits {
   /** The side the limits were checked on — what the maker receives, the solver pays out. */
   side: Side;
-  asset: AssetInfo;
   /** Bounds for that side; null when the side is disabled (max = 0). */
   min: OfferAmount | null;
   max: OfferAmount | null;
-  /** The receive-side amount that was checked. */
-  amount: OfferAmount;
   /** Whether the receive side is enabled (max > 0) — the solver can pay it out. */
   solvable: boolean;
-  /** Whether `amount` sits within [min, max]. Always false when not solvable. */
+  /** Whether the received amount sits within [min, max]. Always false when not solvable. */
   withinLimits: boolean;
 }
 
@@ -145,8 +147,8 @@ export function planOffer(input: PlanOfferInput): OfferPlan {
   const quote = market.quote_asset;
   const depositAsset = give === "base" ? base : quote;
   const receiveAsset = give === "base" ? quote : base;
-  const receiveSide: Side = give === "base" ? "quote" : "base";
   const direction: Direction = give === "base" ? "baseToQuote" : "quoteToBase";
+  const receiveSide = wantSideOf(direction);
   const safetyBps = input.safetyBps ?? DEFAULT_SAFETY_BPS;
   const price = deriveAtomicPrice(input.feedValue, market);
   const offerAmount = resolveOfferAmount(input);
@@ -191,12 +193,10 @@ export function planOffer(input: PlanOfferInput): OfferPlan {
     safetyBps,
     limits: {
       side: receiveSide,
-      asset: receiveAsset,
       min: bounds && amount(receiveAsset, bounds.min),
       max: bounds && amount(receiveAsset, bounds.max),
-      amount: amount(receiveAsset, receiveAtomic),
       solvable: bounds !== null,
-      withinLimits: bounds !== null && receiveAtomic >= bounds.min && receiveAtomic <= bounds.max,
+      withinLimits: withinSideLimits(market, receiveSide, receiveAtomic),
     },
   };
 }

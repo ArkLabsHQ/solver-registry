@@ -37,6 +37,7 @@ export {
   computeWantAmount,
   rationalToDecimalString,
   wantSideOf,
+  otherSide,
   sideLimits,
   solvesSide,
   withinSideLimits,

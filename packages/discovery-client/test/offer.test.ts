@@ -75,12 +75,11 @@ test("planOffer: give base, receive quote (human amounts, precision 8)", () => {
   assert.equal(plan.priceDisplay, "377000.00000000");
   // Limits are checked on the received (quote) side — the side the solver pays out.
   assert.equal(plan.limits.side, "quote");
-  assert.equal(plan.limits.asset.ticker, "DePix");
   assert.equal(plan.limits.solvable, true);
   assert.equal(plan.limits.withinLimits, true);
   assert.equal(plan.limits.min!.display, "0.01"); // 1_000_000 quote atomic
+  assert.equal(plan.limits.min!.asset.ticker, "DePix");
   assert.equal(plan.limits.max!.display, "10000000"); // 10^15 quote atomic
-  assert.equal(plan.limits.amount.atomic, plan.receive.atomic);
 });
 
 test("planOffer: give quote, receive base (reverse, priced with 1/P)", () => {

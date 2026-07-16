@@ -9,6 +9,7 @@ import Ajv from "ajv";
 import addFormats from "ajv-formats";
 import cardSchema from "../schema/card.schema.json" with { type: "json" };
 import { verifyCardSig } from "./canonical.ts";
+import { marketLimitErrors } from "../packages/discovery-client/src/validate.ts";
 
 export const NETWORKS = ["bitcoin", "signet", "mutinynet"] as const;
 export type Network = (typeof NETWORKS)[number];
@@ -41,11 +42,6 @@ export interface Market {
   min_quote_amount: number;
   max_quote_amount: number;
 }
-
-const LIMIT_SIDES = [
-  ["min_base_amount", "max_base_amount"],
-  ["min_quote_amount", "max_quote_amount"],
-] as const;
 
 export interface Card {
   version: 0;
@@ -129,14 +125,10 @@ export function reduceNetwork(
         );
       }
       for (const [i, market] of card.markets.entries()) {
-        for (const [minKey, maxKey] of LIMIT_SIDES) {
-          const min = market[minKey];
-          const max = market[maxKey];
-          if (min > max) {
-            messages.push(`markets[${i}]: ${minKey} (${min}) > ${maxKey} (${max})`);
-          } else if (max > 0 && min < 1) {
-            messages.push(`markets[${i}]: ${minKey} must be >= 1 when ${maxKey} > 0`);
-          }
+        // Cross-field limit rules shared with the client validator, so CI and
+        // clients reject the same cards with the same messages.
+        for (const message of marketLimitErrors(market)) {
+          messages.push(`markets[${i}]: ${message}`);
         }
         const expectedPair = `${market.base_asset.ticker}/${market.quote_asset.ticker}`;
         if (market.pair !== expectedPair) {

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { validateCard, validateIndex } from "../src/validate.ts";
-import { makeMarket } from "./helpers.ts";
+import { makeMarket, makeOneSidedMarket } from "./helpers.ts";
 
 function validCard(): any {
   return { version: 0, name: "alice", markets: [makeMarket()] };
@@ -32,15 +32,10 @@ test("validateCard: accepts an optionally signed card", () => {
 });
 
 test("validateCard: accepts a one-sided market (the other side disabled with 0/0)", () => {
-  const quoteOnly = validCard();
-  quoteOnly.markets[0].min_base_amount = 0;
-  quoteOnly.markets[0].max_base_amount = 0;
-  assert.equal(validateCard(quoteOnly).ok, true, JSON.stringify(validateCard(quoteOnly).errors));
-
-  const baseOnly = validCard();
-  baseOnly.markets[0].min_quote_amount = 0;
-  baseOnly.markets[0].max_quote_amount = 0;
-  assert.equal(validateCard(baseOnly).ok, true, JSON.stringify(validateCard(baseOnly).errors));
+  for (const solves of ["base", "quote"] as const) {
+    const r = validateCard({ version: 0, name: "alice", markets: [makeOneSidedMarket(solves)] });
+    assert.equal(r.ok, true, `${solves}: ${JSON.stringify(r.errors)}`);
+  }
 });
 
 const CARD_REJECTIONS: Array<{ name: string; mutate: (c: any) => void; expect: RegExp }> = [

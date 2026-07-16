@@ -157,30 +157,45 @@ export function wantSideOf(direction: Direction): Side {
   return direction === "baseToQuote" ? "quote" : "base";
 }
 
+/** The opposite side of a pair: what the maker receives when giving `side`. */
+export function otherSide(side: Side): Side {
+  return side === "base" ? "quote" : "base";
+}
+
+// The only side -> field-name mapping in the client; every limit check flows
+// through these two accessors.
+function sideMin(market: MarketLimits, side: Side): number {
+  return side === "base" ? market.min_base_amount : market.min_quote_amount;
+}
+
+function sideMax(market: MarketLimits, side: Side): number {
+  return side === "base" ? market.max_base_amount : market.max_quote_amount;
+}
+
 /**
  * A market's [min, max] bounds for one side, in that side's atomic units, or
  * null when the side is disabled (`max = 0`) — i.e. the solver cannot pay out
  * (solve) that side and makers must not take the direction that receives it.
  */
 export function sideLimits(market: MarketLimits, side: Side): { min: bigint; max: bigint } | null {
-  const min = side === "base" ? market.min_base_amount : market.min_quote_amount;
-  const max = side === "base" ? market.max_base_amount : market.max_quote_amount;
-  if (!max) return null;
-  return { min: BigInt(min), max: BigInt(max) };
+  const max = sideMax(market, side);
+  if (max === 0) return null;
+  return { min: BigInt(sideMin(market, side)), max: BigInt(max) };
 }
 
 /** Whether the solver can pay out (solve) `side`: its `max` bound is > 0. */
 export function solvesSide(market: MarketLimits, side: Side): boolean {
-  return sideLimits(market, side) !== null;
+  return sideMax(market, side) > 0;
 }
 
 /**
  * Whether an amount sits within a side's inclusive [min, max] bounds. Always
  * false when the side is disabled (the solver does not solve it).
+ * BigInt/number relational comparison is exact, so no conversion is needed.
  */
 export function withinSideLimits(market: MarketLimits, side: Side, amount: bigint): boolean {
-  const limits = sideLimits(market, side);
-  return limits !== null && amount >= limits.min && amount <= limits.max;
+  const max = sideMax(market, side);
+  return max > 0 && amount >= sideMin(market, side) && amount <= max;
 }
 
 /** Render a rational to a fixed-decimal string (for display only, never pricing). */
