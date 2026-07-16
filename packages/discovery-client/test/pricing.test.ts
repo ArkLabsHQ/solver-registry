@@ -4,10 +4,17 @@ import {
   parseDecimal,
   deriveAtomicPrice,
   computeWantAmount,
-  rationalToDecimalString,
+  pow10,
+  sideLimits,
   quoteMarket,
 } from "../src/pricing.ts";
-import { makeMarket as market } from "./helpers.ts";
+import { makeMarket as market, makeOneSidedMarket } from "./helpers.ts";
+
+test("pow10: rejects negatives, fractions, and NaN with a labeled error", () => {
+  assert.throws(() => pow10(-1), /non-negative integer/);
+  assert.throws(() => pow10(1.5), /non-negative integer/);
+  assert.throws(() => pow10(NaN), /non-negative integer/);
+});
 
 test("parseDecimal: integers, fixed-point, scientific, signs, and numbers", () => {
   assert.deepEqual(parseDecimal("377000.00000000"), { num: 377000n, den: 1n });
@@ -36,26 +43,46 @@ test("parseDecimal: bounds magnitude so a hostile feed can't force a giant BigIn
 
 test("deriveAtomicPrice: price_decimals scales the raw feed value", () => {
   // Feed reports an 8-decimal fixed-point integer for 65000.
-  assert.deepEqual(deriveAtomicPrice("6500000000000", { price_decimals: 8, invert: false }), {
+  assert.deepEqual(deriveAtomicPrice("6500000000000", { price_decimals: 8 }), {
     num: 65000n,
     den: 1n,
   });
   // Human decimal, no extra scaling.
-  assert.deepEqual(deriveAtomicPrice("377000.00000000", { price_decimals: 0, invert: false }), {
+  assert.deepEqual(deriveAtomicPrice("377000.00000000", { price_decimals: 0 }), {
     num: 377000n,
     den: 1n,
   });
 });
 
-test("deriveAtomicPrice: invert takes the reciprocal", () => {
-  // Feed advertises base-per-quote; invert yields quote-per-base = 50000.
-  const p = deriveAtomicPrice("0.00002", { price_decimals: 0, invert: true });
-  assert.equal(rationalToDecimalString(p, 8), "50000.00000000");
+test("deriveAtomicPrice: rejects a zero/negative price", () => {
+  assert.throws(() => deriveAtomicPrice("0", { price_decimals: 0 }), /must be positive/);
+  assert.throws(() => deriveAtomicPrice("-1", { price_decimals: 0 }), /must be positive/);
 });
 
-test("deriveAtomicPrice: rejects a zero/negative price", () => {
-  assert.throws(() => deriveAtomicPrice("0", { price_decimals: 0, invert: false }), /must be positive/);
-  assert.throws(() => deriveAtomicPrice("0", { price_decimals: 0, invert: true }), /invert a zero/);
+test("sideLimits: max > 0 returns bounds, max = 0 (disabled) returns null", () => {
+  const both = market();
+  assert.deepEqual(sideLimits(both, "base"), { min: 1000n, max: 5_000_000n });
+  assert.deepEqual(sideLimits(both, "quote"), { min: 1_000_000n, max: 1_000_000_000_000_000n });
+
+  const quoteOnly = makeOneSidedMarket("quote"); // base bounds zeroed
+  assert.equal(sideLimits(quoteOnly, "base"), null);
+  assert.deepEqual(sideLimits(quoteOnly, "quote"), { min: 1_000_000n, max: 1_000_000_000_000_000n });
+
+  // Decimal strings carry amounts JSON numbers cannot: exact past 2^53.
+  const huge = market({ max_quote_amount: "9007199254740993" });
+  assert.equal(sideLimits(huge, "quote")!.max, 9007199254740993n);
+
+  // Malformed bounds from unvalidated input read as disabled, never crash.
+  assert.equal(sideLimits({ ...market(), min_quote_amount: undefined } as never, "quote"), null);
+  assert.equal(sideLimits({ ...market(), max_quote_amount: "1e6" } as never, "quote"), null); // non-canonical
+  assert.equal(sideLimits({ ...market(), max_quote_amount: 1000 } as never, "quote"), null); // number, not string
+  assert.equal(sideLimits({ ...market(), min_quote_amount: "0100" } as never, "quote"), null); // leading zero
+
+  // Validation-rejected shapes fail closed too: a zero min on an enabled side
+  // would let a dust deposit pass withinLimits with a zero receive amount, and
+  // min > max is an unsatisfiable range.
+  assert.equal(sideLimits(market({ min_quote_amount: "0" }), "quote"), null);
+  assert.equal(sideLimits(market({ min_base_amount: "5000001", max_base_amount: "5000000" }), "base"), null);
 });
 
 test("computeWantAmount: baseToQuote concedes fee + safety and floors", () => {
@@ -115,31 +142,46 @@ test("quoteMarket: end-to-end from a feed value, with limit check (in range)", (
     direction: "baseToQuote",
     safetyBps: 50,
   });
+  assert.equal(q.solvable, true);
   assert.equal(q.withinLimits, true);
-  assert.equal(q.baseAmount, 100_000n);
   const expected = (100_000n * 65000n * (10000n - 30n - 50n)) / 10000n;
   assert.equal(q.wantAmount, expected);
 });
 
-test("quoteMarket: base-side amount below min is flagged out of limits", () => {
+test("quoteMarket: baseToQuote checks the received quote amount against quote limits", () => {
+  // Raise min_quote_amount above the computed wantAmount so the trade is too small.
   const q = quoteMarket({
-    market: market({ min_base_amount: 1000 }),
+    market: market({ min_quote_amount: "10000000000" }),
     feedValue: "65000",
-    deposit: 500, // below min on the deposited base side
+    deposit: 500, // want ~ 500 * 65000 * 0.992 = 32_240_000 < min_quote
     direction: "baseToQuote",
   });
+  assert.equal(q.solvable, true);
   assert.equal(q.withinLimits, false);
 });
 
 test("quoteMarket: quoteToBase checks limits against the received base amount", () => {
   // Deposit a tiny amount of quote so the resulting base wantAmount is below min.
   const q = quoteMarket({
-    market: market({ min_base_amount: 1000, max_base_amount: 5_000_000 }),
+    market: market(),
     feedValue: "65000",
     deposit: 100, // quote atomic; wantBase ~ 100/65000 < 1 => below min
     direction: "quoteToBase",
   });
   assert.equal(q.direction, "quoteToBase");
-  assert.equal(q.baseAmount, q.wantAmount);
+  assert.equal(q.solvable, true);
+  assert.equal(q.withinLimits, false);
+});
+
+test("quoteMarket: a direction whose want side is disabled (max = 0) is not solvable", () => {
+  // The solver zeroed the quote bounds: it can only pay out base, so a maker
+  // wanting quote (baseToQuote) cannot be served.
+  const q = quoteMarket({
+    market: makeOneSidedMarket("base"),
+    feedValue: "65000",
+    deposit: 100_000,
+    direction: "baseToQuote",
+  });
+  assert.equal(q.solvable, false);
   assert.equal(q.withinLimits, false);
 });

@@ -155,7 +155,7 @@ const EXPLORERS = {
 // ticker; the canonical asset id lives in base_asset.id / quote_asset.id.
 function assetCell(network, asset) {
   const label = asset.ticker;
-  const title = `${asset.name} · precision ${asset.precision} · ${asset.id}`;
+  const title = `${asset.name} · decimals ${asset.decimals ?? "?"} · ${asset.id}`;
   const explorer = EXPLORERS[network];
   if (asset.id === "btc" || !explorer) return el("span", { title, text: label });
   return el("a", {
@@ -208,8 +208,16 @@ async function renderNetwork(network, container) {
   }
 
   const thead = el("thead", {}, [el("tr", {}, [
-    "Pair", "Solver", "Fee (bps)", "Min (base)", "Max (base)", "Feed price",
+    "Pair", "Solver", "Fee (bps)", "Limits (base)", "Limits (quote)", "Feed price",
   ].map((h) => el("th", { text: h })))]);
+
+  // Amounts are canonical decimal strings (exact past 2^53, mirrors the
+  // schemas' amount definition); max "0" disables the side. Anything
+  // non-canonical renders "?" — BigInt alone would decode hex/whitespace/"".
+  const AMOUNT = /^(0|[1-9][0-9]{0,29})$/;
+  const fmtAmount = (v) =>
+    typeof v === "string" && AMOUNT.test(v) ? BigInt(v).toLocaleString("en-US") : "?";
+  const limitsText = (min, max) => (max === "0" ? "—" : `${fmtAmount(min)} – ${fmtAmount(max)}`);
   const tbody = el("tbody");
   const priceCells = [];
 
@@ -224,8 +232,8 @@ async function renderNetwork(network, container) {
       ])]),
       el("td", { text: m.solver }),
       el("td", { class: "num", text: String(m.fee_bps) }),
-      el("td", { class: "num", text: m.min_base_amount.toLocaleString("en-US") }),
-      el("td", { class: "num", text: m.max_base_amount.toLocaleString("en-US") }),
+      el("td", { class: "num", text: limitsText(m.min_base_amount, m.max_base_amount) }),
+      el("td", { class: "num", text: limitsText(m.min_quote_amount, m.max_quote_amount) }),
       priceCell,
     ]));
   }

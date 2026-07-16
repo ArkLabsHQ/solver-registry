@@ -6,7 +6,7 @@
 // amount of 10^14 atomic units round-trip without loss. BigInt is available in
 // every target (modern browsers, Node, and Hermes / React Native).
 
-import type { Market } from "./types.ts";
+import { LIMIT_KEYS, isAmount, type Market, type Side } from "./types.ts";
 
 /** An exact non-negative rational number. `den` is always > 0. */
 export interface Rational {
@@ -40,9 +40,11 @@ function normalize({ num, den }: Rational): Rational {
   return g > 1n ? { num: num / g, den: den / g } : { num, den };
 }
 
-/** 10^n as an exact bigint. Shared with `assets.ts`'s precision conversion. */
+/** 10^n as an exact bigint. Shared with `assets.ts`'s decimals conversion. */
 export function pow10(n: number): bigint {
-  if (n < 0) throw new Error(`pow10 requires n >= 0, got ${n}`);
+  // NaN and fractions must be caught here, not by BigInt(n): a `n < 0` check
+  // alone is bypassed by NaN and the caller would see an unlabeled RangeError.
+  if (!Number.isInteger(n) || n < 0) throw new Error(`pow10 requires a non-negative integer, got ${n}`);
   return 10n ** BigInt(n);
 }
 
@@ -83,24 +85,21 @@ export function parseDecimal(value: string | number): Rational {
 
 /**
  * Derive the market price as an exact rational in quote-atomic-units per
- * base-atomic-unit, applying `price_decimals` and `invert`. Per the spec,
- * pricing stays in atomic units and asset `precision` plays no role here —
- * `price_decimals` already encodes the solver's intended scaling.
+ * base-atomic-unit, applying `price_decimals`. The feed is always advertised in
+ * quote-per-base terms. Per the spec, pricing stays in atomic units and asset
+ * `decimals` plays no role here — `price_decimals` already encodes the
+ * solver's intended scaling.
  *
  * Throws if the resulting price is not strictly positive (a zero/negative feed
- * value, especially with `invert`, cannot price a trade).
+ * value cannot price a trade).
  */
 export function deriveAtomicPrice(
   feedValue: string | number,
-  opts: Pick<Market, "price_decimals" | "invert">,
+  opts: Pick<Market, "price_decimals">,
 ): Rational {
   const f = parseDecimal(feedValue);
   // value / 10^price_decimals
-  let price: Rational = normalize({ num: f.num, den: f.den * pow10(opts.price_decimals) });
-  if (opts.invert) {
-    if (price.num === 0n) throw new Error("cannot invert a zero price feed value");
-    price = normalize({ num: price.den, den: price.num });
-  }
+  const price: Rational = normalize({ num: f.num, den: f.den * pow10(opts.price_decimals) });
   if (price.num <= 0n) throw new Error("price feed value must be positive");
   return price;
 }
@@ -149,22 +148,42 @@ export function computeWantAmount(input: WantAmountInput): bigint {
   return (deposit * price.den * net) / (price.num * 10000n);
 }
 
-/** Whether a base-side amount sits within a market's inclusive [min, max] size bounds. */
-export function withinBaseLimits(
-  market: Pick<Market, "min_base_amount" | "max_base_amount">,
-  baseAmount: bigint,
-): boolean {
-  return baseAmount >= BigInt(market.min_base_amount) && baseAmount <= BigInt(market.max_base_amount);
+/** The opposite side of a pair: what the maker receives when giving `side`. */
+export function otherSide(side: Side): Side {
+  return side === "base" ? "quote" : "base";
+}
+
+/**
+ * A market's [min, max] bounds for one side as exact bigints of that side's
+ * atomic units, or null when the side is disabled (`max = "0"`) — i.e. the
+ * solver cannot pay out (solve) that side and makers must not take the
+ * direction that receives it. Malformed bounds (missing, non-canonical, not a
+ * decimal string) also read as disabled, so unvalidated input fails safe
+ * everywhere instead of crashing or coercing in one call site but not another.
+ * Callers inline the bigint range check rather than going through another
+ * helper.
+ */
+export function sideLimits(market: Market, side: Side): { min: bigint; max: bigint } | null {
+  const min = market[LIMIT_KEYS[side].min];
+  const max = market[LIMIT_KEYS[side].max];
+  if (!isAmount(min) || !isAmount(max) || max === "0") return null;
+  const minBig = BigInt(min);
+  const maxBig = BigInt(max);
+  // An enabled side must satisfy 1 <= min <= max (the validator's rule). A
+  // zero min would let a dust deposit pass withinLimits with a zero receive
+  // amount, and min > max is an unsatisfiable range — both read as disabled.
+  if (minBig === 0n || minBig > maxBig) return null;
+  return { min: minBig, max: maxBig };
 }
 
 /** Render a rational to a fixed-decimal string (for display only, never pricing). */
-export function rationalToDecimalString(r: Rational, decimals = 8): string {
+export function rationalToDecimalString(r: Rational, fractionDigits = 8): string {
   const neg = r.num < 0n;
   const num = neg ? -r.num : r.num;
-  const scaled = (num * pow10(decimals)) / r.den;
-  const s = scaled.toString().padStart(decimals + 1, "0");
-  const whole = s.slice(0, s.length - decimals);
-  const frac = decimals > 0 ? "." + s.slice(s.length - decimals) : "";
+  const scaled = (num * pow10(fractionDigits)) / r.den;
+  const s = scaled.toString().padStart(fractionDigits + 1, "0");
+  const whole = s.slice(0, s.length - fractionDigits);
+  const frac = fractionDigits > 0 ? "." + s.slice(s.length - fractionDigits) : "";
   return (neg ? "-" : "") + whole + frac;
 }
 
@@ -180,9 +199,9 @@ export interface Quote {
   /** Human-readable price at 8 decimals (display only). */
   priceDecimalString: string;
   safetyBps: number;
-  /** The base-side amount the size limits apply to (deposit if base is deposited, else wantAmount). */
-  baseAmount: bigint;
-  /** Whether `baseAmount` sits within [min_base_amount, max_base_amount]. */
+  /** Whether the solver can pay out the maker's receive side: enabled (max > 0) with well-formed bounds. */
+  solvable: boolean;
+  /** Whether `wantAmount` sits within the want side's [min, max]. Always false when not solvable. */
   withinLimits: boolean;
 }
 
@@ -197,8 +216,9 @@ export interface QuoteInput {
 
 /**
  * Price one market from an already-fetched feed value: derive the price, compute
- * the want amount, and check the base-side size limits. Pure and synchronous —
- * `priceMarket` in `discovery.ts` wraps this with the network fetch.
+ * the want amount, and check the want side's size limits (the side the solver
+ * pays out). Pure and synchronous — `priceMarket` in `discovery.ts` wraps this
+ * with the network fetch.
  */
 export function quoteMarket(input: QuoteInput): Quote {
   const { market, direction } = input;
@@ -206,8 +226,7 @@ export function quoteMarket(input: QuoteInput): Quote {
   const deposit = toBigIntAmount(input.deposit, "deposit");
   const price = deriveAtomicPrice(input.feedValue, market);
   const wantAmount = computeWantAmount({ deposit, direction, price, feeBps: market.fee_bps, safetyBps });
-  const baseAmount = direction === "baseToQuote" ? deposit : wantAmount;
-  const withinLimits = withinBaseLimits(market, baseAmount);
+  const limits = sideLimits(market, direction === "baseToQuote" ? "quote" : "base");
   return {
     market,
     direction,
@@ -216,7 +235,7 @@ export function quoteMarket(input: QuoteInput): Quote {
     price,
     priceDecimalString: rationalToDecimalString(price, 8),
     safetyBps,
-    baseAmount,
-    withinLimits,
+    solvable: limits !== null,
+    withinLimits: limits !== null && wantAmount >= limits.min && wantAmount <= limits.max,
   };
 }

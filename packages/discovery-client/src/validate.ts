@@ -7,7 +7,7 @@
 // cross-field rules the reducer enforces, with no `eval` and no dependencies.
 
 import type { AssetInfo, Card, NetworkIndex } from "./types.ts";
-import { isNetwork } from "./types.ts";
+import { AMOUNT_PATTERN, ASSET_KEYS, LIMIT_KEYS, MAX_ASSET_DECIMALS, isAmount, isNetwork } from "./types.ts";
 
 export interface ValidationResult<T> {
   ok: boolean;
@@ -29,7 +29,7 @@ function isObject(v: unknown): v is Record<string, unknown> {
 }
 
 function isInt(v: unknown): v is number {
-  return typeof v === "number" && Number.isInteger(v);
+  return typeof v === "number" && Number.isSafeInteger(v);
 }
 
 // Errors accumulate as path-tagged strings in a plain array; these helpers
@@ -47,10 +47,6 @@ function checkIntRange(errors: string[], path: string, v: unknown, min: number, 
   if (!isInt(v) || v < min || v > max) add(errors, path, `must be an integer in ${min}..${max}`);
 }
 
-function checkIntMin(errors: string[], path: string, v: unknown, min: number): void {
-  if (!isInt(v) || v < min) add(errors, path, `must be an integer >= ${min}`);
-}
-
 function checkStringLength(errors: string[], path: string, v: unknown, min: number, max: number): void {
   if (typeof v !== "string" || v.length < min || v.length > max) {
     add(errors, path, `must be a string of length ${min}..${max}`);
@@ -63,7 +59,7 @@ function checkAllowedKeys(errors: string[], path: string, obj: Record<string, un
   }
 }
 
-const ASSET_KEYS = new Set(["id", "name", "ticker", "precision"]);
+const ASSET_KEY_SET = new Set<string>(ASSET_KEYS);
 const PRICE_FEED_SCHEMA_KEYS = new Set(["type", "price_path"]);
 
 function checkAsset(errors: string[], path: string, v: unknown, strict: boolean): void {
@@ -71,11 +67,11 @@ function checkAsset(errors: string[], path: string, v: unknown, strict: boolean)
     add(errors, path, "must be an object");
     return;
   }
-  if (strict) checkAllowedKeys(errors, path, v, ASSET_KEYS);
+  if (strict) checkAllowedKeys(errors, path, v, ASSET_KEY_SET);
   checkPattern(errors, `${path}/id`, v.id, ASSET_ID, 'must be "btc" or 68 lowercase hex chars');
   checkStringLength(errors, `${path}/name`, v.name, 1, 64);
   checkStringLength(errors, `${path}/ticker`, v.ticker, 1, 16);
-  checkIntRange(errors, `${path}/precision`, v.precision, 0, 18);
+  checkIntRange(errors, `${path}/decimals`, v.decimals, 0, MAX_ASSET_DECIMALS);
 }
 
 function checkPriceFeedSchema(errors: string[], path: string, v: unknown, strict: boolean): void {
@@ -95,11 +91,68 @@ const MARKET_KEYS = new Set([
   "price_feed",
   "price_feed_schema",
   "price_decimals",
-  "invert",
   "fee_bps",
   "min_base_amount",
   "max_base_amount",
+  "min_quote_amount",
+  "max_quote_amount",
 ]);
+
+const LIMIT_SIDES = [LIMIT_KEYS.base, LIMIT_KEYS.quote] as const;
+
+type LimitKey = (typeof LIMIT_SIDES)[number]["min" | "max"];
+
+/**
+ * Cross-field size-limit rules, shared with the reducer (`scripts/reduce.ts`
+ * imports this) so CI and clients reject the same cards with the same words:
+ * per-side min <= max, min >= 1 on an enabled side (max > 0), and at least one
+ * side enabled. Bounds compare as exact bigints. Encoding errors are the
+ * schema layer's job — sides whose fields are not canonical decimal strings
+ * are skipped here.
+ */
+export function marketLimitErrors(market: { [key in LimitKey]?: unknown }): string[] {
+  const errors: string[] = [];
+  let checkedSides = 0;
+  let enabledSides = 0;
+  for (const { min: minKey, max: maxKey } of LIMIT_SIDES) {
+    const minRaw = market[minKey];
+    const maxRaw = market[maxKey];
+    if (!isAmount(minRaw) || !isAmount(maxRaw)) continue;
+    checkedSides++;
+    const min = BigInt(minRaw);
+    const max = BigInt(maxRaw);
+    if (min > max) {
+      errors.push(`${minKey} (${minRaw}) > ${maxKey} (${maxRaw})`);
+    } else if (max > 0n && min < 1n) {
+      errors.push(`${minKey} must be >= 1 when ${maxKey} > 0`);
+    }
+    if (max > 0n) enabledSides++;
+  }
+  if (checkedSides === LIMIT_SIDES.length && enabledSides === 0) {
+    errors.push("must enable size limits for at least one side (max > 0)");
+  }
+  return errors;
+}
+
+/**
+ * The pair-label rule, shared with the reducer: `pair` must equal
+ * "<base-ticker>/<quote-ticker>". Returns the error message, or null when it
+ * matches — or when the fields are too malformed to compare, which the schema
+ * layer reports instead.
+ */
+export function marketPairError(market: {
+  pair?: unknown;
+  base_asset?: unknown;
+  quote_asset?: unknown;
+}): string | null {
+  const base = (market.base_asset as AssetInfo | undefined)?.ticker;
+  const quote = (market.quote_asset as AssetInfo | undefined)?.ticker;
+  if (typeof market.pair !== "string" || typeof base !== "string" || typeof quote !== "string") {
+    return null;
+  }
+  const expected = `${base}/${quote}`;
+  return market.pair === expected ? null : `pair "${market.pair}" does not match asset tickers "${expected}"`;
+}
 
 /**
  * Validate the market fields common to cards and index entries. Unknown keys
@@ -118,33 +171,25 @@ function checkMarket(errors: string[], path: string, v: unknown, strict: boolean
   checkAsset(errors, `${path}/quote_asset`, v.quote_asset, strict);
 
   // pair label must equal the two tickers (identity still lives in the ids).
-  const base = v.base_asset as AssetInfo | undefined;
-  const quote = v.quote_asset as AssetInfo | undefined;
-  if (typeof v.pair === "string" && base?.ticker && quote?.ticker) {
-    const expected = `${base.ticker}/${quote.ticker}`;
-    if (v.pair !== expected) {
-      add(errors, `${path}/pair`, `"${v.pair}" does not match asset tickers "${expected}"`);
-    }
-  }
+  const pairError = marketPairError(v);
+  if (pairError) add(errors, path, pairError);
 
   if (typeof v.price_feed !== "string" || !v.price_feed.startsWith("https://")) {
     add(errors, `${path}/price_feed`, "must be an https:// URL");
   }
   checkPriceFeedSchema(errors, `${path}/price_feed_schema`, v.price_feed_schema, strict);
   checkIntRange(errors, `${path}/price_decimals`, v.price_decimals, 0, 18);
-  if (typeof v.invert !== "boolean") {
-    add(errors, `${path}/invert`, "must be a boolean");
-  }
   checkIntRange(errors, `${path}/fee_bps`, v.fee_bps, 0, 10000);
-  checkIntMin(errors, `${path}/min_base_amount`, v.min_base_amount, 1);
-  checkIntMin(errors, `${path}/max_base_amount`, v.max_base_amount, 1);
-  if (
-    isInt(v.min_base_amount) &&
-    isInt(v.max_base_amount) &&
-    v.min_base_amount > v.max_base_amount
-  ) {
-    add(errors, path, `min_base_amount (${v.min_base_amount}) > max_base_amount (${v.max_base_amount})`);
+
+  // Per-side size bounds, always present as canonical decimal strings; the
+  // cross-field rules (min <= max, min >= 1 when enabled, one side enabled)
+  // live in marketLimitErrors, shared with the reducer.
+  for (const { min, max } of LIMIT_SIDES) {
+    for (const key of [min, max]) {
+      checkPattern(errors, `${path}/${key}`, v[key], AMOUNT_PATTERN, 'must be a decimal string of atomic units ("0" disables the side)');
+    }
   }
+  for (const message of marketLimitErrors(v)) add(errors, path, message);
 }
 
 /** An index entry is a market plus reducer-added provenance (`solver`, optional pubkey). */

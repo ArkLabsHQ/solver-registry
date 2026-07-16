@@ -5,20 +5,18 @@
 // receive this much". `quoteOffer` only adds the price-feed fetch so the output
 // is ready for createOffer/funding code.
 
-import type { AssetInfo, Market } from "./types.ts";
+import type { AssetInfo, Market, Side } from "./types.ts";
 import {
   DEFAULT_SAFETY_BPS,
   computeWantAmount,
   deriveAtomicPrice,
-  withinBaseLimits,
+  otherSide,
+  sideLimits,
   type Direction,
   type Rational,
 } from "./pricing.ts";
 import { toAtomic, fromAtomic, displayPriceString } from "./assets.ts";
 import { fetchFeedValue, type FetchFeedOptions } from "./feed.ts";
-
-/** Which side of the pair the maker deposits. `base` = give base, receive quote. */
-export type OfferSide = "base" | "quote";
 
 export interface OfferAmount {
   asset: AssetInfo;
@@ -26,11 +24,24 @@ export interface OfferAmount {
   display: string;
 }
 
+/**
+ * The size-limit check for a plan: applied to the side the maker receives (the
+ * opposite of `plan.give`). The checked amount (and its asset) is the plan's
+ * `receive`.
+ */
+export interface OfferPlanLimits {
+  /** Bounds for the receive side; null when it is disabled (max = "0") — the market cannot pay it out. */
+  min: OfferAmount | null;
+  max: OfferAmount | null;
+  /** Whether the received amount sits within [min, max]. Always false when the side is disabled. */
+  withinLimits: boolean;
+}
+
 export interface OfferPlan {
   market: Market;
   direction: Direction;
   /** The side the maker gives. */
-  give: OfferSide;
+  give: Side;
   /** What the maker sends. */
   deposit: OfferAmount;
   /** What the maker receives (the want amount to request in the offer). */
@@ -40,28 +51,21 @@ export interface OfferPlan {
   /** Human price (quote-display per base-display) at 8 decimals. */
   priceDisplay: string;
   safetyBps: number;
-  /** The market's size limits, which always apply to the base side. */
-  limits: {
-    baseAsset: AssetInfo;
-    minBase: OfferAmount;
-    maxBase: OfferAmount;
-    /** The base-side amount that was checked (deposit if base is given, else receive). */
-    baseAmount: OfferAmount;
-    withinLimits: boolean;
-  };
+  /** The market's size limits for the received side. */
+  limits: OfferPlanLimits;
 }
 
 type AmountValue = string | number | bigint;
 
 type OfferAmountInput =
   | {
-      /** Amount to give: a display string/number (converted via precision) or bigint atomic units. */
+      /** Amount to give: a display string/number (converted via the asset's decimals) or bigint atomic units. */
       giveAmount: AmountValue;
       wantAmount?: never;
     }
   | {
       giveAmount?: never;
-      /** Amount to receive: a display string/number (converted via precision) or bigint atomic units. */
+      /** Amount to receive: a display string/number (converted via the asset's decimals) or bigint atomic units. */
       wantAmount: AmountValue;
     };
 
@@ -72,7 +76,7 @@ type ResolvedOfferAmount =
 export type PlanOfferInput = {
   market: Market;
   /** Which side the maker deposits. */
-  give: OfferSide;
+  give: Side;
   /** Raw value already read from the market's `price_feed`. */
   feedValue: string | number;
   safetyBps?: number;
@@ -82,12 +86,12 @@ function amount(asset: AssetInfo, atomic: bigint): OfferAmount {
   return {
     asset,
     atomic,
-    display: fromAtomic(atomic, asset.precision),
+    display: fromAtomic(atomic, asset.decimals),
   };
 }
 
-function inputAmount(value: AmountValue, precision: number): bigint {
-  return typeof value === "bigint" ? value : toAtomic(value, precision);
+function inputAmount(value: AmountValue, decimals: number): bigint {
+  return typeof value === "bigint" ? value : toAtomic(value, decimals);
 }
 
 function resolveOfferAmount(input: { giveAmount?: AmountValue; wantAmount?: AmountValue }): ResolvedOfferAmount {
@@ -126,12 +130,23 @@ function depositForWant(input: {
 /**
  * Build a fully-resolved offer plan from an already-fetched feed value. Pure and
  * synchronous. `give: "base"` deposits the base asset and receives the quote;
- * `give: "quote"` is the reverse (priced with 1/P).
+ * `give: "quote"` is the reverse (priced with 1/P). The size-limit check runs
+ * on the received side — the side the solver must pay out — so a market whose
+ * receive side is disabled (max = "0") reports `limits.min/max: null`.
  */
 export function planOffer(input: PlanOfferInput): OfferPlan {
   const { market, give } = input;
   const base = market.base_asset;
   const quote = market.quote_asset;
+  // Fail fast with the field's name: on an unvalidated market a missing or
+  // non-integer decimals would otherwise surface deep in the BigInt math as an
+  // opaque "Cannot convert undefined to a BigInt".
+  for (const key of ["base_asset", "quote_asset"] as const) {
+    const d = market[key]?.decimals;
+    if (typeof d !== "number" || !Number.isInteger(d) || d < 0) {
+      throw new Error(`${key}.decimals must be a non-negative integer`);
+    }
+  }
   const depositAsset = give === "base" ? base : quote;
   const receiveAsset = give === "base" ? quote : base;
   const direction: Direction = give === "base" ? "baseToQuote" : "quoteToBase";
@@ -141,10 +156,9 @@ export function planOffer(input: PlanOfferInput): OfferPlan {
 
   let depositAtomic: bigint;
   let receiveAtomic: bigint;
-  let baseAmount: bigint;
 
   if (offerAmount.kind === "give") {
-    depositAtomic = inputAmount(offerAmount.value, depositAsset.precision);
+    depositAtomic = inputAmount(offerAmount.value, depositAsset.decimals);
     receiveAtomic = computeWantAmount({
       deposit: depositAtomic,
       direction,
@@ -152,9 +166,8 @@ export function planOffer(input: PlanOfferInput): OfferPlan {
       feeBps: market.fee_bps,
       safetyBps,
     });
-    baseAmount = direction === "baseToQuote" ? depositAtomic : receiveAtomic;
   } else {
-    receiveAtomic = inputAmount(offerAmount.value, receiveAsset.precision);
+    receiveAtomic = inputAmount(offerAmount.value, receiveAsset.decimals);
     depositAtomic = depositForWant({
       wantAmount: receiveAtomic,
       direction,
@@ -162,14 +175,14 @@ export function planOffer(input: PlanOfferInput): OfferPlan {
       feeBps: market.fee_bps,
       safetyBps,
     });
-    baseAmount = direction === "baseToQuote" ? depositAtomic : receiveAtomic;
   }
 
   const priceDisplay = displayPriceString(price, {
-    basePrecision: base.precision,
-    quotePrecision: quote.precision,
+    baseDecimals: base.decimals,
+    quoteDecimals: quote.decimals,
   });
 
+  const bounds = sideLimits(market, otherSide(give));
   return {
     market,
     direction,
@@ -180,17 +193,15 @@ export function planOffer(input: PlanOfferInput): OfferPlan {
     priceDisplay,
     safetyBps,
     limits: {
-      baseAsset: base,
-      minBase: amount(base, BigInt(market.min_base_amount)),
-      maxBase: amount(base, BigInt(market.max_base_amount)),
-      baseAmount: amount(base, baseAmount),
-      withinLimits: withinBaseLimits(market, baseAmount),
+      min: bounds && amount(receiveAsset, bounds.min),
+      max: bounds && amount(receiveAsset, bounds.max),
+      withinLimits: bounds !== null && receiveAtomic >= bounds.min && receiveAtomic <= bounds.max,
     },
   };
 }
 
 export type QuoteOfferOptions = FetchFeedOptions & {
-  give: OfferSide;
+  give: Side;
   safetyBps?: number;
 } & OfferAmountInput;
 

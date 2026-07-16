@@ -20,7 +20,7 @@
         "id",
         "name",
         "ticker",
-        "precision"
+        "decimals"
       ],
       "properties": {
         "id": {
@@ -38,7 +38,7 @@
           "minLength": 1,
           "maxLength": 16
         },
-        "precision": {
+        "decimals": {
           "type": "integer",
           "minimum": 0,
           "maximum": 18
@@ -63,6 +63,16 @@
           "description": "RFC 6901 JSON Pointer to the numeric feed value, e.g. /price or /bitcoin/usd. Empty string selects the whole JSON document."
         }
       }
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,29})$",
+      "description": "A canonical decimal-string amount of atomic units: unsigned, no leading zeros. \"0\" disables the side it bounds."
+    },
+    "enabledAmount": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,29}$",
+      "description": "An amount that is strictly positive: the side it bounds is enabled."
     }
   },
   "properties": {
@@ -99,10 +109,27 @@
           "price_feed",
           "price_feed_schema",
           "price_decimals",
-          "invert",
           "fee_bps",
           "min_base_amount",
-          "max_base_amount"
+          "max_base_amount",
+          "min_quote_amount",
+          "max_quote_amount"
+        ],
+        "anyOf": [
+          {
+            "properties": {
+              "max_base_amount": {
+                "$ref": "#/definitions/enabledAmount"
+              }
+            }
+          },
+          {
+            "properties": {
+              "max_quote_amount": {
+                "$ref": "#/definitions/enabledAmount"
+              }
+            }
+          }
         ],
         "properties": {
           "pair": {
@@ -135,10 +162,8 @@
           "price_decimals": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 18
-          },
-          "invert": {
-            "type": "boolean"
+            "maximum": 18,
+            "description": "The feed value divided by 10^price_decimals is the price in quote-atomic-units per base-atomic-unit."
           },
           "fee_bps": {
             "type": "integer",
@@ -146,12 +171,20 @@
             "maximum": 10000
           },
           "min_base_amount": {
-            "type": "integer",
-            "minimum": 1
+            "$ref": "#/definitions/amount",
+            "description": "Lower trade-size bound for the base side, in base atomic units. An enabled side has 1 <= min <= max; when the side is disabled (max = \"0\") min MUST be \"0\"."
           },
           "max_base_amount": {
-            "type": "integer",
-            "minimum": 1
+            "$ref": "#/definitions/amount",
+            "description": "Upper trade-size bound for the base side, in base atomic units. \"0\" disables the side: the solver does not pay out base and makers cannot receive it."
+          },
+          "min_quote_amount": {
+            "$ref": "#/definitions/amount",
+            "description": "Lower trade-size bound for the quote side, in quote atomic units. An enabled side has 1 <= min <= max; when the side is disabled (max = \"0\") min MUST be \"0\"."
+          },
+          "max_quote_amount": {
+            "$ref": "#/definitions/amount",
+            "description": "Upper trade-size bound for the quote side, in quote atomic units. \"0\" disables the side: the solver does not pay out quote and makers cannot receive it."
           }
         }
       }

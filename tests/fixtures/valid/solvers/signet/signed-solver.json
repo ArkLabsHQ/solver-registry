@@ -9,13 +9,13 @@
         "id": "btc",
         "name": "Bitcoin",
         "ticker": "BTC",
-        "precision": 8
+        "decimals": 8
       },
       "quote_asset": {
         "id": "btc",
         "name": "Bitcoin",
         "ticker": "BTC",
-        "precision": 8
+        "decimals": 8
       },
       "price_feed": "https://feed.example.com/price?pair=btcusd",
       "price_feed_schema": {
@@ -23,11 +23,12 @@
         "price_path": "/price"
       },
       "price_decimals": 8,
-      "invert": false,
       "fee_bps": 25,
-      "min_base_amount": 1000,
-      "max_base_amount": 5000000
+      "min_base_amount": "1000",
+      "max_base_amount": "5000000",
+      "min_quote_amount": "1000",
+      "max_quote_amount": "5000000"
     }
   ],
-  "sig": "22175db6ea3e7581c5306a02c04ccbbc2bf844d8f0670534c403d979f05f781f26986434e8a2a6d46abc4ab984e73c82e64de2175e5de5dd869a3a284fb624cd"
+  "sig": "0e95d61e803777958ccf22df568b2b4090909c7b12016240afa220fc8dbc72ae02089ddc4058066ed69c829c88aa3d1959f6c59ee1a79454f92d6efb4eb1a9cd"
 }

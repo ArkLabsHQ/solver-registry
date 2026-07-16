@@ -8,13 +8,13 @@
         "id": "btc",
         "name": "Bitcoin",
         "ticker": "BTC",
-        "precision": 8
+        "decimals": 8
       },
       "quote_asset": {
         "id": "f121ac9b7656797cc68d1e8fecacfbaa2069ec1461edf0bf2f3c37404cb9791a0000",
         "name": "USDT",
         "ticker": "USDT",
-        "precision": 2
+        "decimals": 2
       },
       "price_feed": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
       "price_feed_schema": {
@@ -22,10 +22,11 @@
         "price_path": "/bitcoin/usd"
       },
       "price_decimals": 6,
-      "invert": false,
       "fee_bps": 30,
-      "min_base_amount": 1000,
-      "max_base_amount": 5000000
+      "min_base_amount": "1000",
+      "max_base_amount": "5000000",
+      "min_quote_amount": "100",
+      "max_quote_amount": "500000"
     },
     {
       "pair": "BTC/FDPIX",
@@ -33,13 +34,13 @@
         "id": "btc",
         "name": "Bitcoin",
         "ticker": "BTC",
-        "precision": 8
+        "decimals": 8
       },
       "quote_asset": {
         "id": "9ed8906274b8af3c10c8926adb2e498c3110e6acc35b4e969f7b2489d70a849e0000",
         "name": "FakeDepix",
         "ticker": "FDPIX",
-        "precision": 8
+        "decimals": 8
       },
       "price_feed": "https://api.binance.com/api/v3/ticker/price?symbol=BTCBRL",
       "price_feed_schema": {
@@ -47,10 +48,11 @@
         "price_path": "/price"
       },
       "price_decimals": 0,
-      "invert": false,
       "fee_bps": 30,
-      "min_base_amount": 1000,
-      "max_base_amount": 5000000
+      "min_base_amount": "1000",
+      "max_base_amount": "5000000",
+      "min_quote_amount": "100000000",
+      "max_quote_amount": "2000000000000"
     }
   ]
 }

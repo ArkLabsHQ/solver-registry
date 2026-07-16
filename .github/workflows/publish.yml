@@ -1,11 +1,21 @@
 name: Publish
 
+# Republish when anything that shapes the published artifacts changes: the
+# cards, the reducer (and the client sources it imports), the schemas, or the
+# landing page.
 on:
   push:
     branches:
       - master
     paths:
       - solvers/**
+      - schema/**
+      - package.json
+      - pnpm-lock.yaml
+      - scripts/**
+      - packages/discovery-client/src/**
+      - index.html
+      - .github/workflows/publish.yml
 
 permissions:
   contents: read

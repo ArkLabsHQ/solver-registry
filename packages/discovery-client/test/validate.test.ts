@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { validateCard, validateIndex } from "../src/validate.ts";
-import { makeMarket } from "./helpers.ts";
+import { makeMarket, makeOneSidedMarket } from "./helpers.ts";
 
 function validCard(): any {
   return { version: 0, name: "alice", markets: [makeMarket()] };
@@ -31,6 +31,13 @@ test("validateCard: accepts an optionally signed card", () => {
   assert.equal(validateCard(c).ok, true);
 });
 
+test("validateCard: accepts a one-sided market (the other side disabled with 0/0)", () => {
+  for (const solves of ["base", "quote"] as const) {
+    const r = validateCard({ version: 0, name: "alice", markets: [makeOneSidedMarket(solves)] });
+    assert.equal(r.ok, true, `${solves}: ${JSON.stringify(r.errors)}`);
+  }
+});
+
 const CARD_REJECTIONS: Array<{ name: string; mutate: (c: any) => void; expect: RegExp }> = [
   { name: "bad version", mutate: (c) => (c.version = 1), expect: /version/ },
   { name: "bad name pattern", mutate: (c) => (c.name = "Alice"), expect: /name/ },
@@ -40,7 +47,42 @@ const CARD_REJECTIONS: Array<{ name: string; mutate: (c: any) => void; expect: R
     mutate: (c) => (c.markets[0].base_asset.extra = true),
     expect: /base_asset\/extra is not an allowed property/,
   },
-  { name: "min > max", mutate: (c) => (c.markets[0].min_base_amount = 9_000_000), expect: /min_base_amount/ },
+  { name: "base min > max", mutate: (c) => (c.markets[0].min_base_amount = "9000000"), expect: /min_base_amount \(9000000\) > max_base_amount/ },
+  {
+    name: "quote min > max",
+    mutate: (c) => (c.markets[0].min_quote_amount = "2000000000000000"),
+    expect: /min_quote_amount \(2000000000000000\) > max_quote_amount/,
+  },
+  {
+    name: "missing limit field",
+    mutate: (c) => delete c.markets[0].max_quote_amount,
+    expect: /max_quote_amount must be a decimal string/,
+  },
+  {
+    name: "zero min on an enabled side",
+    mutate: (c) => (c.markets[0].min_quote_amount = "0"),
+    expect: /min_quote_amount must be >= 1 when max_quote_amount > 0/,
+  },
+  {
+    name: "number amount (wrong encoding)",
+    mutate: (c) => (c.markets[0].max_quote_amount = 5000000),
+    expect: /max_quote_amount must be a decimal string/,
+  },
+  {
+    name: "non-canonical amount (leading zeros)",
+    mutate: (c) => (c.markets[0].min_base_amount = "0100"),
+    expect: /min_base_amount must be a decimal string/,
+  },
+  {
+    name: "both sides disabled",
+    mutate: (c) => {
+      c.markets[0].min_base_amount = "0";
+      c.markets[0].max_base_amount = "0";
+      c.markets[0].min_quote_amount = "0";
+      c.markets[0].max_quote_amount = "0";
+    },
+    expect: /at least one side/,
+  },
   {
     name: "pair/ticker mismatch",
     mutate: (c) => (c.markets[0].pair = "BTC/USD"),

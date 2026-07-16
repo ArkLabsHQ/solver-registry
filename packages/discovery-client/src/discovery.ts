@@ -4,9 +4,9 @@
 //
 // Isomorphic by design — see `feed.ts` for the injectable transport.
 
-import { DEFAULT_NETWORK, type AssetInfo, type IndexMarket, type Network, type NetworkIndex } from "./types.ts";
+import { DEFAULT_NETWORK, stableStringify, type AssetInfo, type IndexMarket, type Network, type NetworkIndex, type Side } from "./types.ts";
 import { validateCard, validateIndex } from "./validate.ts";
-import { quoteMarket, withinBaseLimits, type Direction, type Quote } from "./pricing.ts";
+import { quoteMarket, sideLimits, type Direction, type Quote } from "./pricing.ts";
 import { fetchText, fetchFeedValue, type FetchLike, type FetchFeedOptions } from "./feed.ts";
 
 export type SourceType = "registry" | "local";
@@ -129,19 +129,6 @@ export interface DiscoverResult {
   warnings: string[];
 }
 
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  if (value !== null && typeof value === "object") {
-    const obj = value as Record<string, unknown>;
-    const body = Object.keys(obj)
-      .sort()
-      .map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`)
-      .join(",");
-    return `{${body}}`;
-  }
-  return JSON.stringify(value);
-}
-
 function idPair(m: IndexMarket): string {
   return `${m.base_asset.id}/${m.quote_asset.id}`;
 }
@@ -242,10 +229,13 @@ export interface SelectOptions {
   /** Canonical quote asset id. */
   quoteId: string;
   /**
-   * Optional base-side trade size (atomic units). When given, markets whose
-   * [min_base_amount, max_base_amount] do not admit it are filtered out.
+   * The side the maker wants to receive. When given, only markets with that
+   * side enabled (max > 0) — able to pay it out — match, so a direction no
+   * solver can fill yields no market at all.
    */
-  baseAmount?: bigint | number;
+  wantSide?: Side;
+  /** Trade size (atomic units) on `wantSide`, checked against that side's bounds. Requires `wantSide`. */
+  wantAmount?: bigint | number;
 }
 
 export interface MarketPair {
@@ -254,20 +244,34 @@ export interface MarketPair {
   base_asset: AssetInfo;
   quote_asset: AssetInfo;
   marketCount: number;
+  /**
+   * How many of the pair's markets can pay out each side. A maker can only
+   * receive a side whose count is > 0; UIs should not offer a direction whose
+   * receive side no solver solves.
+   */
+  solvable: { base: number; quote: number };
 }
 
 function selectionPredicate(opts: SelectOptions): (m: IndexMarket) => boolean {
-  const amount = opts.baseAmount === undefined ? undefined : BigInt(opts.baseAmount);
+  const { wantSide } = opts;
+  if (opts.wantAmount !== undefined && wantSide === undefined) {
+    throw new Error("wantAmount requires wantSide");
+  }
+  const amount = opts.wantAmount === undefined ? undefined : BigInt(opts.wantAmount);
   return (m) => {
     if (m.base_asset.id !== opts.baseId || m.quote_asset.id !== opts.quoteId) return false;
-    return amount === undefined || withinBaseLimits(m, amount);
+    if (wantSide === undefined) return true;
+    const limits = sideLimits(m, wantSide);
+    if (limits === null) return false;
+    return amount === undefined || (amount >= limits.min && amount <= limits.max);
   };
 }
 
 /**
- * Filter already-discovered markets to one id pair (and optionally a trade
- * size), preserving discovery ranking so the first result is the best expected
- * execution. Pricing still comes from the feed; this ranking is a static proxy.
+ * Filter already-discovered markets to one id pair (and optionally a receive
+ * side and trade size), preserving discovery ranking so the first result is the
+ * best expected execution. Pricing still comes from the feed; this ranking is a
+ * static proxy.
  */
 export function selectMarkets<T extends IndexMarket>(markets: T[], opts: SelectOptions): T[] {
   return markets.filter(selectionPredicate(opts));
@@ -275,24 +279,28 @@ export function selectMarkets<T extends IndexMarket>(markets: T[], opts: SelectO
 
 /**
  * List available id pairs from a ranked market set. The first market for each
- * pair supplies the display labels, and `marketCount` tells UIs how many solver
- * candidates are available for that pair.
+ * pair supplies the display labels, `marketCount` tells UIs how many solver
+ * candidates are available for that pair, and `solvable` how many can pay out
+ * each side (a side at 0 cannot be traded on this pair).
  */
 export function listMarkets<T extends IndexMarket>(markets: T[]): MarketPair[] {
   const byPair = new Map<string, MarketPair>();
   for (const market of markets) {
     const key = idPair(market);
-    const existing = byPair.get(key);
-    if (existing) {
-      existing.marketCount++;
-      continue;
+    let entry = byPair.get(key);
+    if (!entry) {
+      entry = {
+        pair: market.pair,
+        base_asset: market.base_asset,
+        quote_asset: market.quote_asset,
+        marketCount: 0,
+        solvable: { base: 0, quote: 0 },
+      };
+      byPair.set(key, entry);
     }
-    byPair.set(key, {
-      pair: market.pair,
-      base_asset: market.base_asset,
-      quote_asset: market.quote_asset,
-      marketCount: 1,
-    });
+    entry.marketCount++;
+    if (sideLimits(market, "base")) entry.solvable.base++;
+    if (sideLimits(market, "quote")) entry.solvable.quote++;
   }
   return [...byPair.values()];
 }

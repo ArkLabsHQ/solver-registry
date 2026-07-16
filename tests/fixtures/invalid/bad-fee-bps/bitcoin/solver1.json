@@ -8,13 +8,13 @@
         "id": "btc",
         "name": "Bitcoin",
         "ticker": "BTC",
-        "precision": 8
+        "decimals": 8
       },
       "quote_asset": {
         "id": "btc",
         "name": "Bitcoin",
         "ticker": "BTC",
-        "precision": 8
+        "decimals": 8
       },
       "price_feed": "https://feed.example.com/x",
       "price_feed_schema": {
@@ -22,10 +22,11 @@
         "price_path": "/price"
       },
       "price_decimals": 8,
-      "invert": false,
       "fee_bps": 10001,
-      "min_base_amount": 1000,
-      "max_base_amount": 5000000
+      "min_base_amount": "1000",
+      "max_base_amount": "5000000",
+      "min_quote_amount": "1000",
+      "max_quote_amount": "5000000"
     }
   ]
 }

@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join, dirname } from "node:path";
 import { reduceAll, reduceNetwork, NETWORKS, findUnknownNetworkDirs } from "../scripts/reduce.ts";
+import { AMOUNT_PATTERN, ASSET_KEYS, MAX_ASSET_DECIMALS } from "../packages/discovery-client/src/types.ts";
+import { validateIndex } from "../packages/discovery-client/src/validate.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXED_META = { generatedAt: 1700000000, commit: "a".repeat(40) };
@@ -69,7 +71,11 @@ const REJECTION_CASES: Array<{ case: string; expect: string }> = [
   { case: "bad-price-decimals", expect: "must be <=" },
   { case: "bad-fee-bps", expect: "must be <=" },
   { case: "min-gt-max", expect: "min_base_amount" },
-  { case: "non-positive-amount", expect: "must be >=" },
+  { case: "quote-min-gt-max", expect: "min_quote_amount" },
+  { case: "unpaired-limits", expect: "must have required property" },
+  { case: "no-limits", expect: "must enable size limits for at least one side" },
+  { case: "non-positive-amount", expect: "min_base_amount must be >= 1 when max_base_amount > 0" },
+  { case: "bad-amount-type", expect: "must be string" },
   { case: "sig-without-pubkey", expect: "must have property" },
   { case: "tampered-sig", expect: "sig does not verify" },
   { case: "additional-properties", expect: "must NOT have additional properties" },
@@ -92,4 +98,40 @@ test("a card placed outside a known network directory is flagged", () => {
 
 test("NETWORKS constant covers bitcoin, signet, mutinynet", () => {
   assert.deepEqual([...NETWORKS], ["bitcoin", "signet", "mutinynet"]);
+});
+
+// The amount encoding is declared once per artifact (client AMOUNT_PATTERN,
+// each schema's definitions.amount, and its positive subset enabledAmount that
+// backs the at-least-one-side anyOf); this pins them all to one source.
+test("the schemas' amount definitions match the client's AMOUNT_PATTERN", () => {
+  // "^(0|[1-9][0-9]{0,29})$" minus the zero alternative.
+  const enabled = AMOUNT_PATTERN.source.replace("(0|", "").replace(")$", "$");
+  for (const name of ["card.schema.json", "index.schema.json"]) {
+    const schema = JSON.parse(readFileSync(join(here, "..", "schema", name), "utf8"));
+    assert.equal(schema.definitions.amount.pattern, AMOUNT_PATTERN.source, name);
+    assert.equal(schema.definitions.enabledAmount.pattern, enabled, name);
+  }
+});
+
+// The asset shape is likewise declared once per artifact. Without this pin a
+// skew in index.schema.json alone escapes the whole suite: that schema is
+// compiled against no document here — only third-party consumers run it.
+test("the schemas' asset definitions match the client's ASSET_KEYS and decimals bound", () => {
+  for (const name of ["card.schema.json", "index.schema.json"]) {
+    const asset = JSON.parse(readFileSync(join(here, "..", "schema", name), "utf8")).definitions.asset;
+    assert.deepEqual(asset.required, [...ASSET_KEYS], name);
+    assert.deepEqual(Object.keys(asset.properties).sort(), [...ASSET_KEYS].sort(), name);
+    assert.equal(asset.properties.decimals.minimum, 0, name);
+    assert.equal(asset.properties.decimals.maximum, MAX_ASSET_DECIMALS, name);
+  }
+});
+
+// Nothing else runs an index through the client's hand-rolled validator, so a
+// reducer/validator skew would only ever surface in a browser at runtime.
+test("golden indexes validate under the client's validateIndex", () => {
+  for (const network of NETWORKS) {
+    const idx = JSON.parse(readFileSync(goldenOf(network), "utf8"));
+    const r = validateIndex(idx, network);
+    assert.equal(r.ok, true, `${network}: ${r.errors.join("; ")}`);
+  }
 });

@@ -9,55 +9,19 @@ import Ajv from "ajv";
 import addFormats from "ajv-formats";
 import cardSchema from "../schema/card.schema.json" with { type: "json" };
 import { verifyCardSig } from "./canonical.ts";
+import { marketLimitErrors, marketPairError } from "../packages/discovery-client/src/validate.ts";
+// The wire types live with the portable client; the reducer imports them so a
+// schema change is a one-place edit. (The client never imports from scripts/ —
+// this direction keeps it dependency-free.)
+import {
+  NETWORKS,
+  type Card,
+  type IndexMarket,
+  type Network,
+  type NetworkIndex,
+} from "../packages/discovery-client/src/types.ts";
 
-export const NETWORKS = ["bitcoin", "signet", "mutinynet"] as const;
-export type Network = (typeof NETWORKS)[number];
-
-export interface AssetInfo {
-  id: string;
-  name: string;
-  ticker: string;
-  precision: number;
-}
-
-export interface PriceFeedSchema {
-  type: "json";
-  price_path: string;
-}
-
-export interface Market {
-  pair: string;
-  base_asset: AssetInfo;
-  quote_asset: AssetInfo;
-  price_feed: string;
-  price_feed_schema: PriceFeedSchema;
-  price_decimals: number;
-  invert: boolean;
-  fee_bps: number;
-  min_base_amount: number;
-  max_base_amount: number;
-}
-
-export interface Card {
-  version: 0;
-  name: string;
-  discovery_pubkey?: string;
-  sig?: string;
-  markets: Market[];
-}
-
-export interface IndexMarket extends Market {
-  solver: string;
-  discovery_pubkey?: string;
-}
-
-export interface NetworkIndex {
-  version: 0;
-  network: Network;
-  generated_at: number;
-  commit: string;
-  markets: IndexMarket[];
-}
+export { NETWORKS };
 
 export interface CardError {
   file: string;
@@ -104,7 +68,8 @@ export function reduceNetwork(
       continue;
     }
 
-    if (!validateCardSchema(parsed)) {
+    const schemaOk = validateCardSchema(parsed);
+    if (!schemaOk) {
       for (const err of validateCardSchema.errors ?? []) {
         messages.push(`${err.instancePath || "/"} ${err.message}`);
       }
@@ -113,36 +78,43 @@ export function reduceNetwork(
     const card = parsed as Card;
     const expectedName = basename(file, ".json");
 
-    if (messages.length === 0) {
+    // Cross-field rules shared with the client validator run even when the
+    // schema already failed: both helpers are shape-defensive, so a solver
+    // whose card breaks a structural rule still sees the human message (e.g.
+    // "must enable size limits for at least one side") next to Ajv's output.
+    if (Array.isArray(card.markets)) {
+      for (const [i, market] of card.markets.entries()) {
+        const m = market ?? {};
+        for (const message of [...marketLimitErrors(m), marketPairError(m)]) {
+          if (message) messages.push(`markets[${i}]: ${message}`);
+        }
+      }
+    }
+
+    // Name and duplicate checks only need a name, not a schema-clean card —
+    // reporting them alongside any other errors saves the solver a CI
+    // round-trip per masked error. Only the signature check needs the whole
+    // card to be structurally valid.
+    if (typeof card.name === "string") {
       if (card.name !== expectedName) {
         messages.push(
           `name "${card.name}" does not match filename "${file}"`,
         );
       }
-      for (const [i, market] of card.markets.entries()) {
-        if (market.min_base_amount > market.max_base_amount) {
-          messages.push(
-            `markets[${i}]: min_base_amount (${market.min_base_amount}) > max_base_amount (${market.max_base_amount})`,
-          );
-        }
-        const expectedPair = `${market.base_asset.ticker}/${market.quote_asset.ticker}`;
-        if (market.pair !== expectedPair) {
-          messages.push(
-            `markets[${i}]: pair "${market.pair}" does not match asset tickers "${expectedPair}"`,
-          );
-        }
-      }
-      if (card.sig) {
-        if (!verifyCardSig(card)) {
-          messages.push("sig does not verify against discovery_pubkey");
-        }
-      }
       if (seenNames.has(card.name)) {
         messages.push(
           `duplicate name "${card.name}" (also used by ${seenNames.get(card.name)})`,
         );
-      } else {
+      } else if (schemaOk) {
+        // Only structurally valid cards claim their name: a schema-broken card
+        // must not make a later valid card report "duplicate name" for a file
+        // it never touched.
         seenNames.set(card.name, file);
+      }
+    }
+    if (schemaOk && card.sig) {
+      if (!verifyCardSig(card)) {
+        messages.push("sig does not verify against discovery_pubkey");
       }
     }
 
