@@ -49,15 +49,15 @@ export interface Market {
   /** The solver's spread, in basis points. Sort key: lower is better expected execution. */
   fee_bps: number;
   /**
-   * Per-side trade-size bounds in that side's atomic units. A side's min/max are
-   * always declared together, and a declared side is one the solver can pay out
-   * (solve): makers can only receive a side whose bounds are present. At least
-   * one side is always declared.
+   * Per-side trade-size bounds in that side's atomic units, always present.
+   * `max = 0` disables the side: the solver cannot pay it out (solve it), so
+   * makers cannot receive it — `min` is then 0 too. An enabled side has
+   * 1 <= min <= max, and at least one side is enabled.
    */
-  min_base_amount?: number;
-  max_base_amount?: number;
-  min_quote_amount?: number;
-  max_quote_amount?: number;
+  min_base_amount: number;
+  max_base_amount: number;
+  min_quote_amount: number;
+  max_quote_amount: number;
 }
 
 /** A card is one solver's market listing for one network (what a solver PRs / a user pins). */

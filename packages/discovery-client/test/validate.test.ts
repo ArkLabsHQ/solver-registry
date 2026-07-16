@@ -31,15 +31,15 @@ test("validateCard: accepts an optionally signed card", () => {
   assert.equal(validateCard(c).ok, true);
 });
 
-test("validateCard: accepts a one-sided market (only one side's limits declared)", () => {
+test("validateCard: accepts a one-sided market (the other side disabled with 0/0)", () => {
   const quoteOnly = validCard();
-  delete quoteOnly.markets[0].min_base_amount;
-  delete quoteOnly.markets[0].max_base_amount;
+  quoteOnly.markets[0].min_base_amount = 0;
+  quoteOnly.markets[0].max_base_amount = 0;
   assert.equal(validateCard(quoteOnly).ok, true, JSON.stringify(validateCard(quoteOnly).errors));
 
   const baseOnly = validCard();
-  delete baseOnly.markets[0].min_quote_amount;
-  delete baseOnly.markets[0].max_quote_amount;
+  baseOnly.markets[0].min_quote_amount = 0;
+  baseOnly.markets[0].max_quote_amount = 0;
   assert.equal(validateCard(baseOnly).ok, true, JSON.stringify(validateCard(baseOnly).errors));
 });
 
@@ -59,17 +59,22 @@ const CARD_REJECTIONS: Array<{ name: string; mutate: (c: any) => void; expect: R
     expect: /min_quote_amount \(2000000000000000\) > max_quote_amount/,
   },
   {
-    name: "unpaired limits",
+    name: "missing limit field",
     mutate: (c) => delete c.markets[0].max_quote_amount,
-    expect: /min_quote_amount and max_quote_amount must be declared together/,
+    expect: /max_quote_amount must be an integer >= 0/,
   },
   {
-    name: "no limits on either side",
+    name: "zero min on an enabled side",
+    mutate: (c) => (c.markets[0].min_quote_amount = 0),
+    expect: /min_quote_amount must be >= 1 when max_quote_amount > 0/,
+  },
+  {
+    name: "both sides disabled",
     mutate: (c) => {
-      delete c.markets[0].min_base_amount;
-      delete c.markets[0].max_base_amount;
-      delete c.markets[0].min_quote_amount;
-      delete c.markets[0].max_quote_amount;
+      c.markets[0].min_base_amount = 0;
+      c.markets[0].max_base_amount = 0;
+      c.markets[0].min_quote_amount = 0;
+      c.markets[0].max_quote_amount = 0;
     },
     expect: /at least one side/,
   },

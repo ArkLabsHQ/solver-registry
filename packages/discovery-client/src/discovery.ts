@@ -242,14 +242,14 @@ export interface SelectOptions {
   /** Canonical quote asset id. */
   quoteId: string;
   /**
-   * The side the maker wants to receive. When given, only markets that declare
-   * size bounds for — can pay out — that side match, so a direction no solver
-   * can fill yields no market at all.
+   * The side the maker wants to receive. When given, only markets with that
+   * side enabled (max > 0) — able to pay it out — match, so a direction no
+   * solver can fill yields no market at all.
    */
   wantSide?: Side;
   /**
    * Optional trade size (atomic units) on `wantSide`, checked against that
-   * side's declared bounds. Requires `wantSide`.
+   * side's bounds. Requires `wantSide`.
    */
   wantAmount?: bigint | number;
 }

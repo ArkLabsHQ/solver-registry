@@ -144,7 +144,7 @@ package entrypoint does not import React.
 | `fetchIndex(url, opts)` | Fetch + validate a single per-network index (never throws). Defaults to `network: "bitcoin"`. |
 | `listMarkets(markets)` | List available id pairs, how many solver candidates each pair has, and how many can pay out each side (`solvable.base` / `solvable.quote`). |
 | `selectMarkets(markets, {baseId, quoteId, wantSide?, wantAmount?})` / `bestMarket(..., {cursor?})` | Filter to one id pair — and optionally to markets that can pay out `wantSide`, sized by `wantAmount` on that side — keeping the ranking. `cursor: 1` selects the second-ranked market. |
-| `solvesSide(market, side)` / `sideLimits(market, side)` / `withinSideLimits(market, side, amount)` | Per-side solvability and size-bound checks. A side with no declared bounds is one the solver cannot pay out. |
+| `solvesSide(market, side)` / `sideLimits(market, side)` / `withinSideLimits(market, side, amount)` | Per-side solvability and size-bound checks. A side with `max = 0` is disabled: the solver cannot pay it out. |
 | `quoteOffer(market, {give, giveAmount \| wantAmount, safetyBps?})` | Fetch the feed and build a full `OfferPlan` (human in/out). |
 | `planOffer({market, give, giveAmount \| wantAmount, feedValue, safetyBps?})` | Same, from an already-fetched feed value (pure/sync). |
 | `priceMarket(market, {deposit, direction, safetyBps?})` | Lower-level: fetch feed → atomic `Quote` (`wantAmount`). |
@@ -160,12 +160,12 @@ receive amount, while `wantAmount` fixes the requested receive amount and
 computes the minimum deposit. `safetyBps` defaults to `50` — the cushion that
 absorbs feed movement between funding and fill.
 
-Markets declare size limits per side (`min|max_base_amount`,
-`min|max_quote_amount`), and a declared side is one the solver can pay out: a
-market with only quote bounds only serves `give: "base"`. Plans check the
-received side — `plan.limits.solvable` says whether the market can pay that
-side at all, and `plan.limits.withinLimits` whether the received amount sits
-inside its `[min, max]`.
+Markets carry size limits for both sides (`min|max_base_amount`,
+`min|max_quote_amount`), and `max = 0` disables a side — the solver cannot pay
+it out, so a market with zeroed base bounds only serves `give: "base"`. Plans
+check the received side — `plan.limits.solvable` says whether the market can
+pay that side at all, and `plan.limits.withinLimits` whether the received
+amount sits inside its `[min, max]`.
 
 ## Roadmap
 

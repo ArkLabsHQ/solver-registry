@@ -25,7 +25,7 @@ export interface UseOfferQuoteResult {
   give: OfferSide;
   /**
    * Whether the market can pay out the side the maker receives (the opposite of
-   * `give`): it declared size bounds for it. `null` while no market is selected.
+   * `give`): that side's max bound is > 0. `null` while no market is selected.
    * A `false` here means this give-direction can never fill on this market —
    * UIs should disable the form or switch market/direction.
    */

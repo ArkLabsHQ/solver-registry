@@ -140,26 +140,29 @@ function checkMarket(errors: string[], path: string, v: unknown, strict: boolean
   checkIntRange(errors, `${path}/price_decimals`, v.price_decimals, 0, 18);
   checkIntRange(errors, `${path}/fee_bps`, v.fee_bps, 0, 10000);
 
-  // Per-side size bounds: each side's min/max are declared together, and at
-  // least one side must be present (a market with no solvable side is useless).
-  let declaredSides = 0;
+  // Per-side size bounds, always present. max = 0 disables the side (min must
+  // then be 0 via min <= max); an enabled side has 1 <= min <= max, and at
+  // least one side must be enabled (a market with no solvable side is useless).
+  let enabledSides = 0;
+  let boundsOk = true;
   for (const [minKey, maxKey] of LIMIT_SIDES) {
     const min = v[minKey];
     const max = v[maxKey];
-    if (min === undefined && max === undefined) continue;
-    if (min === undefined || max === undefined) {
-      add(errors, path, `${minKey} and ${maxKey} must be declared together`);
+    checkIntMin(errors, `${path}/${minKey}`, min, 0);
+    checkIntMin(errors, `${path}/${maxKey}`, max, 0);
+    if (!isInt(min) || !isInt(max)) {
+      boundsOk = false;
       continue;
     }
-    declaredSides++;
-    checkIntMin(errors, `${path}/${minKey}`, min, 1);
-    checkIntMin(errors, `${path}/${maxKey}`, max, 1);
-    if (isInt(min) && isInt(max) && min > max) {
+    if (min > max) {
       add(errors, path, `${minKey} (${min}) > ${maxKey} (${max})`);
+    } else if (max > 0 && min < 1) {
+      add(errors, path, `${minKey} must be >= 1 when ${maxKey} > 0`);
     }
+    if (max > 0) enabledSides++;
   }
-  if (declaredSides === 0) {
-    add(errors, path, "must declare size limits for at least one side (base and/or quote)");
+  if (boundsOk && enabledSides === 0) {
+    add(errors, path, "must enable size limits for at least one side (max > 0)");
   }
 }
 

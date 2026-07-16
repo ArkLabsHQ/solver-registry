@@ -211,9 +211,9 @@ async function renderNetwork(network, container) {
     "Pair", "Solver", "Fee (bps)", "Limits (base)", "Limits (quote)", "Feed price",
   ].map((h) => el("th", { text: h })))]);
 
-  // A side with no declared bounds is one the solver does not pay out.
+  // A side with max = 0 is disabled: the solver does not pay it out.
   const limitsText = (min, max) =>
-    min === undefined ? "—" : `${min.toLocaleString("en-US")} – ${max.toLocaleString("en-US")}`;
+    !max ? "—" : `${min.toLocaleString("en-US")} – ${max.toLocaleString("en-US")}`;
   const tbody = el("tbody");
   const priceCells = [];
 

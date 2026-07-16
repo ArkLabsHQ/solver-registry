@@ -158,25 +158,25 @@ export function wantSideOf(direction: Direction): Side {
 }
 
 /**
- * A market's declared [min, max] bounds for one side, in that side's atomic
- * units, or null when the side has no bounds — i.e. the solver cannot pay out
+ * A market's [min, max] bounds for one side, in that side's atomic units, or
+ * null when the side is disabled (`max = 0`) — i.e. the solver cannot pay out
  * (solve) that side and makers must not take the direction that receives it.
  */
 export function sideLimits(market: MarketLimits, side: Side): { min: bigint; max: bigint } | null {
   const min = side === "base" ? market.min_base_amount : market.min_quote_amount;
   const max = side === "base" ? market.max_base_amount : market.max_quote_amount;
-  if (min === undefined || max === undefined) return null;
+  if (!max) return null;
   return { min: BigInt(min), max: BigInt(max) };
 }
 
-/** Whether the solver can pay out (solve) `side`: it declared size bounds for it. */
+/** Whether the solver can pay out (solve) `side`: its `max` bound is > 0. */
 export function solvesSide(market: MarketLimits, side: Side): boolean {
   return sideLimits(market, side) !== null;
 }
 
 /**
  * Whether an amount sits within a side's inclusive [min, max] bounds. Always
- * false when the side declares no bounds (the solver does not solve it).
+ * false when the side is disabled (the solver does not solve it).
  */
 export function withinSideLimits(market: MarketLimits, side: Side, amount: bigint): boolean {
   const limits = sideLimits(market, side);
@@ -208,7 +208,7 @@ export interface Quote {
   safetyBps: number;
   /** The side the maker receives; size limits are checked on this side. */
   wantSide: Side;
-  /** Whether the market declares bounds for — can pay out — the want side. */
+  /** Whether the want side is enabled (max > 0) — the solver can pay it out. */
   solvable: boolean;
   /** Whether `wantAmount` sits within the want side's [min, max]. Always false when not solvable. */
   withinLimits: boolean;

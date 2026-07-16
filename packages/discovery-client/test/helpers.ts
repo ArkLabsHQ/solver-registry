@@ -17,7 +17,7 @@ export function makeMarket(overrides: Partial<Market> = {}): Market {
     price_feed_schema: { type: "json", price_path: "/price" },
     price_decimals: 0,
     fee_bps: 30,
-    // Both sides declared: the default market solves both directions.
+    // Both sides enabled: the default market solves both directions.
     min_base_amount: 1000,
     max_base_amount: 5_000_000,
     min_quote_amount: 1_000_000,
@@ -26,17 +26,13 @@ export function makeMarket(overrides: Partial<Market> = {}): Market {
   };
 }
 
-/** A one-sided market: drops the other side's bounds from the default market. */
+/** A one-sided market: the other side's bounds are zeroed (max = 0 disables). */
 export function makeOneSidedMarket(solves: "base" | "quote", overrides: Partial<Market> = {}): Market {
-  const market = makeMarket(overrides);
-  if (solves === "base") {
-    delete market.min_quote_amount;
-    delete market.max_quote_amount;
-  } else {
-    delete market.min_base_amount;
-    delete market.max_base_amount;
-  }
-  return market;
+  const disabled =
+    solves === "base"
+      ? { min_quote_amount: 0, max_quote_amount: 0 }
+      : { min_base_amount: 0, max_base_amount: 0 };
+  return makeMarket({ ...disabled, ...overrides });
 }
 
 /** Route-table fetch stub: unknown URLs 404, listed URLs return their body/status. */

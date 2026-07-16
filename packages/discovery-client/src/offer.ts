@@ -31,12 +31,12 @@ export interface OfferPlanLimits {
   /** The side the limits were checked on — what the maker receives, the solver pays out. */
   side: Side;
   asset: AssetInfo;
-  /** Declared bounds for that side; null when the market does not solve it. */
+  /** Bounds for that side; null when the side is disabled (max = 0). */
   min: OfferAmount | null;
   max: OfferAmount | null;
   /** The receive-side amount that was checked. */
   amount: OfferAmount;
-  /** Whether the market declares bounds for — can pay out — the receive side. */
+  /** Whether the receive side is enabled (max > 0) — the solver can pay it out. */
   solvable: boolean;
   /** Whether `amount` sits within [min, max]. Always false when not solvable. */
   withinLimits: boolean;
@@ -136,8 +136,8 @@ function depositForWant(input: {
  * Build a fully-resolved offer plan from an already-fetched feed value. Pure and
  * synchronous. `give: "base"` deposits the base asset and receives the quote;
  * `give: "quote"` is the reverse (priced with 1/P). The size-limit check runs
- * on the received side — the side the solver must pay out — so a market that
- * declares no bounds for it reports `solvable: false`.
+ * on the received side — the side the solver must pay out — so a market whose
+ * receive side is disabled (max = 0) reports `solvable: false`.
  */
 export function planOffer(input: PlanOfferInput): OfferPlan {
   const { market, give } = input;

@@ -55,16 +55,17 @@ test("deriveAtomicPrice: rejects a zero/negative price", () => {
   assert.throws(() => deriveAtomicPrice("-1", { price_decimals: 0 }), /must be positive/);
 });
 
-test("side helpers: declared bounds mark a side solvable, absent bounds do not", () => {
+test("side helpers: max > 0 marks a side solvable, max = 0 disables it", () => {
   const both = market();
   assert.equal(solvesSide(both, "base"), true);
   assert.equal(solvesSide(both, "quote"), true);
   assert.deepEqual(sideLimits(both, "base"), { min: 1000n, max: 5_000_000n });
 
-  const quoteOnly = makeOneSidedMarket("quote");
+  const quoteOnly = makeOneSidedMarket("quote"); // base bounds zeroed
   assert.equal(solvesSide(quoteOnly, "base"), false);
   assert.equal(sideLimits(quoteOnly, "base"), null);
-  assert.equal(withinSideLimits(quoteOnly, "base", 2000n), false); // unsolvable side never passes
+  assert.equal(withinSideLimits(quoteOnly, "base", 0n), false); // disabled side never passes, even at 0
+  assert.equal(withinSideLimits(quoteOnly, "base", 2000n), false);
   assert.equal(withinSideLimits(quoteOnly, "quote", 1_000_000n), true);
   assert.equal(withinSideLimits(quoteOnly, "quote", 999_999n), false);
 });
@@ -165,8 +166,8 @@ test("quoteMarket: quoteToBase checks limits against the received base amount", 
   assert.equal(q.withinLimits, false);
 });
 
-test("quoteMarket: a direction whose want side has no declared bounds is not solvable", () => {
-  // The solver only declared base bounds: it can only pay out base, so a maker
+test("quoteMarket: a direction whose want side is disabled (max = 0) is not solvable", () => {
+  // The solver zeroed the quote bounds: it can only pay out base, so a maker
   // wanting quote (baseToQuote) cannot be served.
   const q = quoteMarket({
     market: makeOneSidedMarket("base"),

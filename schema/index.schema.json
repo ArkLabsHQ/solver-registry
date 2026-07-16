@@ -99,17 +99,15 @@
           "price_feed",
           "price_feed_schema",
           "price_decimals",
-          "fee_bps"
+          "fee_bps",
+          "min_base_amount",
+          "max_base_amount",
+          "min_quote_amount",
+          "max_quote_amount"
         ],
-        "dependencies": {
-          "min_base_amount": ["max_base_amount"],
-          "max_base_amount": ["min_base_amount"],
-          "min_quote_amount": ["max_quote_amount"],
-          "max_quote_amount": ["min_quote_amount"]
-        },
         "anyOf": [
-          { "required": ["min_base_amount", "max_base_amount"] },
-          { "required": ["min_quote_amount", "max_quote_amount"] }
+          { "properties": { "max_base_amount": { "type": "integer", "minimum": 1 } } },
+          { "properties": { "max_quote_amount": { "type": "integer", "minimum": 1 } } }
         ],
         "properties": {
           "pair": {
@@ -152,21 +150,23 @@
           },
           "min_base_amount": {
             "type": "integer",
-            "minimum": 1,
-            "description": "Lower trade-size bound for the base side, in base atomic units. Declared together with max_base_amount; presence means the solver can pay out (solve) the base side."
+            "minimum": 0,
+            "description": "Lower trade-size bound for the base side, in base atomic units. An enabled side has 1 <= min <= max; when the side is disabled (max = 0) min MUST be 0."
           },
           "max_base_amount": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 0,
+            "description": "Upper trade-size bound for the base side, in base atomic units. 0 disables the side: the solver does not pay out base and makers cannot receive it."
           },
           "min_quote_amount": {
             "type": "integer",
-            "minimum": 1,
-            "description": "Lower trade-size bound for the quote side, in quote atomic units. Declared together with max_quote_amount; presence means the solver can pay out (solve) the quote side."
+            "minimum": 0,
+            "description": "Lower trade-size bound for the quote side, in quote atomic units. An enabled side has 1 <= min <= max; when the side is disabled (max = 0) min MUST be 0."
           },
           "max_quote_amount": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 0,
+            "description": "Upper trade-size bound for the quote side, in quote atomic units. 0 disables the side: the solver does not pay out quote and makers cannot receive it."
           }
         }
       }
