@@ -78,18 +78,23 @@ export function reduceNetwork(
     const card = parsed as Card;
     const expectedName = basename(file, ".json");
 
+    // Cross-field rules shared with the client validator run even when the
+    // schema already failed: both helpers are shape-defensive, so a solver
+    // whose card breaks a structural rule still sees the human message (e.g.
+    // "must enable size limits for at least one side") next to Ajv's output.
+    if (Array.isArray(card.markets)) {
+      for (const [i, market] of card.markets.entries()) {
+        for (const message of [...marketLimitErrors(market ?? {}), marketPairError(market ?? {})]) {
+          if (message) messages.push(`markets[${i}]: ${message}`);
+        }
+      }
+    }
+
     if (messages.length === 0) {
       if (card.name !== expectedName) {
         messages.push(
           `name "${card.name}" does not match filename "${file}"`,
         );
-      }
-      for (const [i, market] of card.markets.entries()) {
-        // Cross-field rules shared with the client validator, so CI and
-        // clients reject the same cards with the same messages.
-        for (const message of [...marketLimitErrors(market), marketPairError(market)]) {
-          if (message) messages.push(`markets[${i}]: ${message}`);
-        }
       }
       if (card.sig) {
         if (!verifyCardSig(card)) {

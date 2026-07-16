@@ -60,6 +60,10 @@ test("sideLimits: max > 0 returns bounds, max = 0 (disabled) returns null", () =
   const quoteOnly = makeOneSidedMarket("quote"); // base bounds zeroed
   assert.equal(sideLimits(quoteOnly, "base"), null);
   assert.deepEqual(sideLimits(quoteOnly, "quote"), { min: 1_000_000, max: 1_000_000_000_000_000 });
+
+  // Malformed bounds from unvalidated input read as disabled, never crash.
+  assert.equal(sideLimits({ ...market(), min_quote_amount: undefined } as never, "quote"), null);
+  assert.equal(sideLimits({ ...market(), max_quote_amount: "1e6" } as never, "quote"), null);
 });
 
 test("computeWantAmount: baseToQuote concedes fee + safety and floors", () => {

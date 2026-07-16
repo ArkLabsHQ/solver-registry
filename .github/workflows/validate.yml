@@ -1,11 +1,20 @@
 name: Validate
 
+# The reducer and its tests are load-bearing on the schemas, the client
+# package sources (scripts/reduce.ts imports from packages/discovery-client),
+# and the fixtures — validate on changes to any of them, not just cards.
 on:
   pull_request:
     branches:
       - master
     paths:
       - solvers/**
+      - schema/**
+      - scripts/**
+      - packages/**
+      - tests/**
+      - index.html
+      - .github/workflows/validate.yml
 
 jobs:
   validate:

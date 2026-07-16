@@ -56,12 +56,17 @@ const CARD_REJECTIONS: Array<{ name: string; mutate: (c: any) => void; expect: R
   {
     name: "missing limit field",
     mutate: (c) => delete c.markets[0].max_quote_amount,
-    expect: /max_quote_amount must be an integer >= 0/,
+    expect: /max_quote_amount must be an integer in 0\.\./,
   },
   {
     name: "zero min on an enabled side",
     mutate: (c) => (c.markets[0].min_quote_amount = 0),
     expect: /min_quote_amount must be >= 1 when max_quote_amount > 0/,
+  },
+  {
+    name: "amount above Number.MAX_SAFE_INTEGER",
+    mutate: (c) => (c.markets[0].max_quote_amount = 9007199254740992),
+    expect: /max_quote_amount must be an integer in 0\.\.9007199254740991/,
   },
   {
     name: "both sides disabled",
@@ -111,6 +116,14 @@ test("validateIndex: tolerates unknown forward-compatible fields", () => {
   idx.future_field = 123;
   idx.markets[0].future_market_field = "x";
   assert.equal(validateIndex(idx, "bitcoin").ok, true);
+});
+
+test("validateIndex: rejects the removed legacy invert field instead of mispricing", () => {
+  const idx = validIndex();
+  idx.markets[0].invert = true;
+  const r = validateIndex(idx, "bitcoin");
+  assert.equal(r.ok, false);
+  assert.match(r.errors.join("\n"), /invert is a removed legacy field/);
 });
 
 test("validateIndex: rejects unknown version", () => {

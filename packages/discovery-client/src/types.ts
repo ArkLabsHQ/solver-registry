@@ -1,10 +1,11 @@
 // Shared types for the discovery client.
 //
 // These mirror `schema/card.schema.json` and `schema/index.schema.json`, the
-// on-the-wire contract this library consumes. They are redeclared here (rather
-// than imported from `scripts/reduce.ts`) so the client stays a self-contained,
-// portable ESM module with zero Node dependencies — safe to bundle for browsers
-// and Expo / React Native. Keep them in sync with the schemas.
+// on-the-wire contract this library consumes, and are the single declaration
+// of the wire types — `scripts/reduce.ts` imports them from here. That import
+// direction keeps this package a self-contained, portable ESM module with zero
+// Node dependencies — safe to bundle for browsers and Expo / React Native.
+// Keep them in sync with the schemas.
 
 export const NETWORKS = ["bitcoin", "signet", "mutinynet"] as const;
 export type Network = (typeof NETWORKS)[number];

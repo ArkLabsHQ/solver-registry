@@ -73,6 +73,7 @@ const REJECTION_CASES: Array<{ case: string; expect: string }> = [
   { case: "unpaired-limits", expect: "must have required property" },
   { case: "no-limits", expect: "must enable size limits for at least one side" },
   { case: "non-positive-amount", expect: "min_base_amount must be >= 1 when max_base_amount > 0" },
+  { case: "unsafe-amount", expect: "must be <= 9007199254740991" },
   { case: "sig-without-pubkey", expect: "must have property" },
   { case: "tampered-sig", expect: "sig does not verify" },
   { case: "additional-properties", expect: "must NOT have additional properties" },

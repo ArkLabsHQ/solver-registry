@@ -28,8 +28,15 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+/**
+ * Amounts above Number.MAX_SAFE_INTEGER round during JSON parsing, so the
+ * validated bound could differ from what the solver wrote. Mirrored by the
+ * schemas' `maximum` on the four limit fields.
+ */
+const MAX_AMOUNT = 9007199254740991;
+
 function isInt(v: unknown): v is number {
-  return typeof v === "number" && Number.isInteger(v);
+  return typeof v === "number" && Number.isSafeInteger(v);
 }
 
 // Errors accumulate as path-tagged strings in a plain array; these helpers
@@ -185,12 +192,12 @@ function checkMarket(errors: string[], path: string, v: unknown, strict: boolean
   checkIntRange(errors, `${path}/price_decimals`, v.price_decimals, 0, 18);
   checkIntRange(errors, `${path}/fee_bps`, v.fee_bps, 0, 10000);
 
-  // Per-side size bounds, always present as integers >= 0; the cross-field
-  // rules (min <= max, min >= 1 when enabled, one side enabled) live in
-  // marketLimitErrors, shared with the reducer.
+  // Per-side size bounds, always present as safe integers >= 0; the
+  // cross-field rules (min <= max, min >= 1 when enabled, one side enabled)
+  // live in marketLimitErrors, shared with the reducer.
   for (const [minKey, maxKey] of LIMIT_SIDES) {
-    checkIntMin(errors, `${path}/${minKey}`, v[minKey], 0);
-    checkIntMin(errors, `${path}/${maxKey}`, v[maxKey], 0);
+    checkIntRange(errors, `${path}/${minKey}`, v[minKey], 0, MAX_AMOUNT);
+    checkIntRange(errors, `${path}/${maxKey}`, v[maxKey], 0, MAX_AMOUNT);
   }
   for (const message of marketLimitErrors(v)) add(errors, path, message);
 }
@@ -199,6 +206,12 @@ function checkMarket(errors: string[], path: string, v: unknown, strict: boolean
 function checkIndexMarket(errors: string[], path: string, v: unknown): void {
   checkMarket(errors, path, v, false);
   if (!isObject(v)) return;
+  // Unknown keys are tolerated for forward-compat, but `invert` is a known
+  // legacy semantic modifier: pricing no longer reads it, so silently
+  // accepting an entry that declares an inverted feed would misprice by P².
+  if (v.invert !== undefined) {
+    add(errors, `${path}/invert`, "is a removed legacy field; feeds must be quote-per-base");
+  }
   checkPattern(errors, `${path}/solver`, v.solver, NAME, 'must match "^[a-z0-9-]+$"');
   if (v.discovery_pubkey !== undefined) {
     checkPattern(errors, `${path}/discovery_pubkey`, v.discovery_pubkey, PUBKEY, "must be 64 lowercase hex chars");

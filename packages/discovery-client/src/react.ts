@@ -119,24 +119,27 @@ export function useOfferQuote(
   // Solvability is a static market property — known before any feed fetch.
   const solvable = market ? sideLimits(market, otherSide(give)) !== null : null;
 
+  // Derived state is only valid for the (market, give) it was computed from:
+  // drop it the moment either changes, so a market switch can never expose the
+  // previous market's plan or feed price while the new quote loads.
   useEffect(() => {
-    if (!market || !solvable) {
-      // No market, or the market cannot pay out the side the maker receives:
-      // no feed fetch, no plan — `solvable` tells the UI which case it is.
-      // Clear the computed counterpart so the previous market's mirrored
-      // amount doesn't linger on screen.
-      if (activeInput === "give") setWantAmountValue("");
-      else setGiveAmountValue("");
-      setFeedValue(null);
-      setPlan(null);
-      setStatus("idle");
-      setError(null);
-      return;
-    }
+    setFeedValue(null);
+    setPlan(null);
+  }, [give, market]);
 
-    if (activeAmount.trim() === "") {
-      if (activeInput === "give") setWantAmountValue("");
-      else setGiveAmountValue("");
+  useEffect(() => {
+    if (!market || !solvable || activeAmount.trim() === "") {
+      // Nothing to quote: no market, a receive side the market cannot pay out
+      // (`solvable` tells the UI which), or no input. With a market selected,
+      // clear the computed counterpart so a stale mirrored amount never
+      // lingers — but keep both amounts across deselection (`market` null),
+      // where the inactive field may hold user input (e.g. an initial amount
+      // seeded before discovery finished).
+      if (market) {
+        if (activeInput === "give") setWantAmountValue("");
+        else setGiveAmountValue("");
+      }
+      if (!market || !solvable) setFeedValue(null);
       setPlan(null);
       setStatus("idle");
       setError(null);

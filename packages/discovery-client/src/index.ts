@@ -58,6 +58,7 @@ export {
   quoteOffer,
   type OfferAmount,
   type OfferPlan,
+  type OfferPlanLimits,
   type PlanOfferInput,
   type QuoteOfferOptions,
 } from "./offer.ts";

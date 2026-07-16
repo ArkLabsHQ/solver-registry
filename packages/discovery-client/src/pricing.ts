@@ -155,6 +155,9 @@ export function otherSide(side: Side): Side {
  * A market's [min, max] bounds for one side, in that side's atomic units, or
  * null when the side is disabled (`max = 0`) — i.e. the solver cannot pay out
  * (solve) that side and makers must not take the direction that receives it.
+ * Malformed bounds (missing, fractional, strings, beyond 2^53) also read as
+ * disabled, so unvalidated input fails safe everywhere instead of crashing or
+ * coercing in one call site but not another.
  *
  * The only side -> field-name mapping in the client. Bounds are plain numbers;
  * bigint amounts compare exactly against them (`amount >= limits.min`), so
@@ -163,7 +166,9 @@ export function otherSide(side: Side): Side {
 export function sideLimits(market: Market, side: Side): { min: number; max: number } | null {
   const min = side === "base" ? market.min_base_amount : market.min_quote_amount;
   const max = side === "base" ? market.max_base_amount : market.max_quote_amount;
-  return max > 0 ? { min, max } : null;
+  return Number.isSafeInteger(max) && max > 0 && Number.isSafeInteger(min) && min >= 0
+    ? { min, max }
+    : null;
 }
 
 /** Render a rational to a fixed-decimal string (for display only, never pricing). */
